@@ -15,8 +15,8 @@ export default function Home() {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center p-6">
-      <h1 className="text-3xl font-bold mb-6 text-center">
+    <div className="min-h-screen bg-gray-100 flex flex-col items-center p-6">
+      <h1 className="text-3xl font-extrabold mb-8 text-gray-800 text-center">
         📊 CIN Risk Score Data Collection App
       </h1>
 
@@ -25,15 +25,15 @@ export default function Home() {
           <Link
             key={idx}
             href={section.path}
-            className="bg-white rounded-xl shadow-md p-6 text-center hover:bg-blue-100 transition border border-gray-200"
+            className="bg-white rounded-xl shadow-lg p-6 text-center hover:bg-blue-50 transition border border-gray-300"
           >
-            <span className="text-lg font-semibold">{section.name}</span>
+            <span className="text-xl font-semibold text-gray-800">{section.name}</span>
           </Link>
         ))}
       </div>
 
       <footer className="mt-10 text-sm text-gray-500">
-        Made with ❤️ for CIN Study Project
+        Made with ❤️ by MIMA
       </footer>
     </div>
   );
