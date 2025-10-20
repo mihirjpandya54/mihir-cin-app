@@ -1,126 +1,241 @@
 "use client";
+
 import { useState } from "react";
 import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL as string,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
-export default function PatientPage() {
-  const [patientName, setPatientName] = useState("");
-  const [sex, setSex] = useState("");
-  const [admissionDate, setAdmissionDate] = useState("");
-  const [procedureDate, setProcedureDate] = useState("");
-  const [studyType, setStudyType] = useState("");
+export default function PatientDetailsPage() {
+  const [formData, setFormData] = useState({
+    patient_name: "",
+    patient_id_hospital: "",
+    age: "",
+    sex: "",
+    admission_date: "",
+    discharge_date: "",
+    procedure_type: "",
+    procedure_date_cag: "",
+    procedure_time_cag: "",
+    procedure_date_ptca: "",
+    procedure_time_ptca: "",
+    study_type: "",
+    hospital_stay: "",
+  });
+
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState("");
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    let updatedData = { ...formData, [name]: value };
+
+    // Auto calculate study type
+    if (name === "admission_date") {
+      const admissionDate = new Date(value);
+      const cutoffDate = new Date("2025-10-06");
+      if (admissionDate >= cutoffDate) {
+        updatedData.study_type = "Prospective";
+      } else {
+        updatedData.study_type = "Retrospective";
+      }
+
+      // Auto calculate hospital stay if discharge date already entered
+      if (formData.discharge_date) {
+        const dischargeDate = new Date(formData.discharge_date);
+        const diff = dischargeDate.getTime() - admissionDate.getTime();
+        const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
+        updatedData.hospital_stay = `${days} day(s)`;
+      }
+    }
+
+    // Auto calculate hospital stay when discharge date is entered
+    if (name === "discharge_date" && formData.admission_date) {
+      const admissionDate = new Date(formData.admission_date);
+      const dischargeDate = new Date(value);
+      const diff = dischargeDate.getTime() - admissionDate.getTime();
+      const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
+      updatedData.hospital_stay = `${days} day(s)`;
+    }
+
+    setFormData(updatedData);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setLoading(true);
+    setMessage("");
 
-    // 🧮 Auto-calculate Study Type
-    const cutoff = new Date("2025-10-06");
-    const entered = new Date(admissionDate);
-    const studyTypeCalc = entered > cutoff ? "Prospective" : "Retrospective";
-    setStudyType(studyTypeCalc);
-
-    const { data, error } = await supabase.from("patient_details").insert([
-      {
-        patient_name: patientName,
-        sex,
-        admission_date: admissionDate,
-        procedure_date: procedureDate,
-        study_type: studyTypeCalc,
-      },
-    ]);
+    const { error } = await supabase.from("patient_details").insert([formData]);
+    setLoading(false);
 
     if (error) {
-      alert(`❌ Error saving: ${error.message}`);
+      console.error(error);
+      setMessage("❌ Failed to save. Check console.");
     } else {
-      alert("✅ Patient details saved successfully!");
-      setPatientName("");
-      setSex("");
-      setAdmissionDate("");
-      setProcedureDate("");
-      setStudyType("");
+      setMessage("✅ Patient data saved successfully!");
+      setFormData({
+        patient_name: "",
+        patient_id_hospital: "",
+        age: "",
+        sex: "",
+        admission_date: "",
+        discharge_date: "",
+        procedure_type: "",
+        procedure_date_cag: "",
+        procedure_time_cag: "",
+        procedure_date_ptca: "",
+        procedure_time_ptca: "",
+        study_type: "",
+        hospital_stay: "",
+      });
     }
   };
 
+  const inputStyle =
+    "border rounded p-2 w-full text-black placeholder-gray-500 bg-white";
+
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
-      <div className="bg-white p-8 rounded-xl shadow-lg max-w-lg w-full">
-        <h1 className="text-2xl font-bold mb-6 text-gray-900 text-center">
-          🧑‍⚕️ Patient Details Entry
-        </h1>
-        <form onSubmit={handleSubmit} className="space-y-4">
+    <div className="min-h-screen bg-gray-50 p-6 flex flex-col items-center">
+      <h1 className="text-2xl font-bold mb-6 text-gray-900">
+        🧑‍⚕️ Patient Details Entry
+      </h1>
 
-          <div>
-            <label className="block text-gray-800 font-medium mb-1">Patient Name</label>
-            <input
-              type="text"
-              value={patientName}
-              onChange={(e) => setPatientName(e.target.value)}
-              placeholder="Enter patient name"
-              className="border rounded p-2 w-full text-black bg-white placeholder-gray-500"
-              required
-            />
-          </div>
+      <form
+        onSubmit={handleSubmit}
+        className="bg-white p-6 rounded-lg shadow-lg w-full max-w-xl space-y-4 text-gray-900"
+      >
+        <input
+          type="text"
+          name="patient_name"
+          placeholder="Patient Name"
+          value={formData.patient_name}
+          onChange={handleChange}
+          required
+          className={inputStyle}
+        />
+        <input
+          type="text"
+          name="patient_id_hospital"
+          placeholder="Hospital ID"
+          value={formData.patient_id_hospital}
+          onChange={handleChange}
+          className={inputStyle}
+        />
+        <input
+          type="number"
+          name="age"
+          placeholder="Age"
+          value={formData.age}
+          onChange={handleChange}
+          className={inputStyle}
+        />
+        <select
+          name="sex"
+          value={formData.sex}
+          onChange={handleChange}
+          className={inputStyle}
+        >
+          <option value="">Select Sex</option>
+          <option value="M">Male</option>
+          <option value="F">Female</option>
+        </select>
+        <input
+          type="date"
+          name="admission_date"
+          placeholder="Admission Date"
+          value={formData.admission_date}
+          onChange={handleChange}
+          className={inputStyle}
+        />
+        <input
+          type="date"
+          name="discharge_date"
+          placeholder="Discharge Date"
+          value={formData.discharge_date}
+          onChange={handleChange}
+          className={inputStyle}
+        />
+        <input
+          type="text"
+          name="study_type"
+          placeholder="Study Type"
+          value={formData.study_type}
+          readOnly
+          className="border rounded p-2 w-full text-black bg-gray-100 placeholder-gray-500 cursor-not-allowed"
+        />
+        <input
+          type="text"
+          name="hospital_stay"
+          placeholder="Hospital Stay (days)"
+          value={formData.hospital_stay}
+          readOnly
+          className="border rounded p-2 w-full text-black bg-gray-100 placeholder-gray-500 cursor-not-allowed"
+        />
+        <select
+          name="procedure_type"
+          value={formData.procedure_type}
+          onChange={handleChange}
+          className={inputStyle}
+        >
+          <option value="">Select Procedure</option>
+          <option value="CAG">CAG</option>
+          <option value="PTCA">PTCA</option>
+          <option value="CAG + PTCA">CAG + PTCA</option>
+        </select>
 
-          <div>
-            <label className="block text-gray-800 font-medium mb-1">Sex</label>
-            <select
-              value={sex}
-              onChange={(e) => setSex(e.target.value)}
-              className="border rounded p-2 w-full text-black bg-white placeholder-gray-500"
-              required
-            >
-              <option value="">Select Sex</option>
-              <option value="Male">Male</option>
-              <option value="Female">Female</option>
-              <option value="Other">Other</option>
-            </select>
-          </div>
+        <label className="block font-semibold text-gray-800">
+          CAG Date & Time
+        </label>
+        <input
+          type="date"
+          name="procedure_date_cag"
+          value={formData.procedure_date_cag}
+          onChange={handleChange}
+          className={inputStyle}
+        />
+        <input
+          type="time"
+          name="procedure_time_cag"
+          value={formData.procedure_time_cag}
+          onChange={handleChange}
+          className={inputStyle}
+        />
 
-          <div>
-            <label className="block text-gray-800 font-medium mb-1">Admission Date</label>
-            <input
-              type="date"
-              value={admissionDate}
-              onChange={(e) => setAdmissionDate(e.target.value)}
-              className="border rounded p-2 w-full text-black bg-white placeholder-gray-500"
-              required
-            />
-          </div>
+        <label className="block font-semibold text-gray-800">
+          PTCA Date & Time
+        </label>
+        <input
+          type="date"
+          name="procedure_date_ptca"
+          value={formData.procedure_date_ptca}
+          onChange={handleChange}
+          className={inputStyle}
+        />
+        <input
+          type="time"
+          name="procedure_time_ptca"
+          value={formData.procedure_time_ptca}
+          onChange={handleChange}
+          className={inputStyle}
+        />
 
-          <div>
-            <label className="block text-gray-800 font-medium mb-1">Procedure Date</label>
-            <input
-              type="date"
-              value={procedureDate}
-              onChange={(e) => setProcedureDate(e.target.value)}
-              className="border rounded p-2 w-full text-black bg-white placeholder-gray-500"
-              required
-            />
-          </div>
+        <button
+          type="submit"
+          disabled={loading}
+          className="bg-blue-600 text-white px-4 py-2 rounded w-full hover:bg-blue-700"
+        >
+          {loading ? "Saving..." : "Save Patient"}
+        </button>
 
-          <div>
-            <label className="block text-gray-800 font-medium mb-1">Study Type (Auto)</label>
-            <input
-              type="text"
-              value={studyType}
-              readOnly
-              placeholder="Will auto calculate"
-              className="border rounded p-2 w-full text-black bg-gray-100 placeholder-gray-500 cursor-not-allowed"
-            />
-          </div>
-
-          <button
-            type="submit"
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 rounded-lg transition-colors"
-          >
-            💾 Save Patient Details
-          </button>
-        </form>
-      </div>
+        {message && (
+          <p className="text-center text-sm mt-2 text-gray-900">
+            {message}
+          </p>
+        )}
+      </form>
     </div>
   );
 }
