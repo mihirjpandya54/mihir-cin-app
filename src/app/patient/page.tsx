@@ -36,11 +36,8 @@ export default function PatientDetailsPage() {
     if (name === "admission_date") {
       const admissionDate = new Date(value);
       const cutoffDate = new Date("2025-10-06");
-      if (admissionDate >= cutoffDate) {
-        updatedData.study_type = "Prospective";
-      } else {
-        updatedData.study_type = "Retrospective";
-      }
+      updatedData.study_type =
+        admissionDate >= cutoffDate ? "Prospective" : "Retrospective";
 
       // Auto calculate hospital stay if discharge date already entered
       if (formData.discharge_date) {
@@ -142,6 +139,8 @@ export default function PatientDetailsPage() {
           <option value="M">Male</option>
           <option value="F">Female</option>
         </select>
+
+        <label className="block font-semibold text-gray-800">Admission Date</label>
         <input
           type="date"
           name="admission_date"
@@ -150,6 +149,8 @@ export default function PatientDetailsPage() {
           onChange={handleChange}
           className={inputStyle}
         />
+
+        <label className="block font-semibold text-gray-800">Discharge Date</label>
         <input
           type="date"
           name="discharge_date"
@@ -158,6 +159,7 @@ export default function PatientDetailsPage() {
           onChange={handleChange}
           className={inputStyle}
         />
+
         <input
           type="text"
           name="study_type"
@@ -174,6 +176,7 @@ export default function PatientDetailsPage() {
           readOnly
           className="border rounded p-2 w-full text-black bg-gray-100 placeholder-gray-500 cursor-not-allowed"
         />
+
         <select
           name="procedure_type"
           value={formData.procedure_type}
@@ -186,9 +189,7 @@ export default function PatientDetailsPage() {
           <option value="CAG + PTCA">CAG + PTCA</option>
         </select>
 
-        <label className="block font-semibold text-gray-800">
-          CAG Date & Time
-        </label>
+        <label className="block font-semibold text-gray-800">CAG Date & Time</label>
         <input
           type="date"
           name="procedure_date_cag"
@@ -204,9 +205,7 @@ export default function PatientDetailsPage() {
           className={inputStyle}
         />
 
-        <label className="block font-semibold text-gray-800">
-          PTCA Date & Time
-        </label>
+        <label className="block font-semibold text-gray-800">PTCA Date & Time</label>
         <input
           type="date"
           name="procedure_date_ptca"
@@ -231,9 +230,7 @@ export default function PatientDetailsPage() {
         </button>
 
         {message && (
-          <p className="text-center text-sm mt-2 text-gray-900">
-            {message}
-          </p>
+          <p className="text-center text-sm mt-2 text-gray-900">{message}</p>
         )}
       </form>
     </div>
