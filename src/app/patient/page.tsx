@@ -58,7 +58,6 @@ export default function PatientDetailsPage() {
       p.ipd_number.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  // 🧮 Auto calculate study type + stay days
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     let updated = { ...formData, [name]: value };
@@ -69,7 +68,6 @@ export default function PatientDetailsPage() {
       updated.study_type = admissionDate >= cutoff ? "Prospective" : "Retrospective";
     }
 
-    // calculate hospital stay
     if (updated.admission_date && updated.discharge_date) {
       const a = new Date(`${updated.admission_date}T${updated.admission_time || "00:00"}`);
       const d = new Date(`${updated.discharge_date}T${updated.discharge_time || "00:00"}`);
@@ -80,10 +78,19 @@ export default function PatientDetailsPage() {
     setFormData(updated);
   };
 
-  // 🕒 Combine date + time to ISO
   const toDateTime = (d: string, t: string) => {
     if (!d) return null;
     return t ? `${d}T${t}` : `${d}T00:00`;
+  };
+
+  // ✅ Helper to set active patient after save/select
+  const setActivePatient = async (patientId: string) => {
+    await supabase
+      .from("active_patient")
+      .upsert({
+        user_id: "00000000-0000-0000-0000-000000000001",
+        patient_id: patientId,
+      });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -92,7 +99,8 @@ export default function PatientDetailsPage() {
     setMessage("");
 
     if (selectedPatientId) {
-      setMessage("✅ Existing patient selected. No new row created.");
+      await setActivePatient(selectedPatientId);
+      setMessage("✅ Existing patient selected as active.");
       setLoading(false);
       return;
     }
@@ -118,31 +126,20 @@ export default function PatientDetailsPage() {
       procedure_datetime_ptca,
     };
 
-    const { error } = await supabase.from("patient_details").insert([payload]);
+    const { data, error } = await supabase
+      .from("patient_details")
+      .insert([payload])
+      .select("id")
+      .single();
 
     setLoading(false);
     if (error) {
       console.error(error);
       setMessage(`❌ Failed to save patient: ${error.message}`);
     } else {
-      setMessage("✅ Patient saved successfully!");
-      setFormData({
-        patient_name: "",
-        ipd_number: "",
-        age: "",
-        sex: "",
-        admission_date: "",
-        admission_time: "",
-        discharge_date: "",
-        discharge_time: "",
-        procedure_type: "",
-        procedure_date_cag: "",
-        procedure_time_cag: "",
-        procedure_date_ptca: "",
-        procedure_time_ptca: "",
-        study_type: "",
-        hospital_stay_days: "",
-      });
+      await setActivePatient(data.id);
+      setMessage("✅ Patient saved and set as active!");
+      resetForm();
     }
   };
 
@@ -169,6 +166,8 @@ export default function PatientDetailsPage() {
         hospital_stay_days: data.hospital_stay_days?.toString() || "",
       });
       setSearchTerm(`${data.patient_name} — ${data.ipd_number}`);
+      await setActivePatient(id);
+      setMessage("✅ Existing patient set as active.");
     }
   };
 
