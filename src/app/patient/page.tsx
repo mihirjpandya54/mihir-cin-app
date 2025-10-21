@@ -8,173 +8,165 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
-interface PatientLite {
+interface Patient {
   id: string;
   patient_name: string;
-  ipd_number: string;
+  patient_id_hospital: string;
 }
 
 export default function PatientDetailsPage() {
-  const [patients, setPatients] = useState<PatientLite[]>([]);
+  const [patients, setPatients] = useState<Patient[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
-    ipd_number: "",
     patient_name: "",
+    patient_id_hospital: "",
     age: "",
     sex: "",
     admission_date: "",
-    admission_time: "",
     discharge_date: "",
-    discharge_time: "",
     procedure_type: "",
     procedure_date_cag: "",
     procedure_time_cag: "",
     procedure_date_ptca: "",
     procedure_time_ptca: "",
     study_type: "",
-    hospital_stay_days: "",
+    hospital_stay: "",
   });
 
-  const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState("");
 
-  // fetch all patients on load
+  // 🔸 Load patient list
   useEffect(() => {
     const fetchPatients = async () => {
       const { data, error } = await supabase
         .from("patient_details")
-        .select("id, patient_name, ipd_number")
+        .select("id, patient_name, patient_id_hospital")
         .order("patient_name", { ascending: true });
       if (!error && data) setPatients(data);
     };
     fetchPatients();
   }, []);
 
-  // filter patients for search
   const filteredPatients = patients.filter(
     (p) =>
       p.patient_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.ipd_number.toLowerCase().includes(searchTerm.toLowerCase())
+      p.patient_id_hospital.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  // 🧮 Auto calculations
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    let updated = { ...formData, [name]: value };
+    let updatedData = { ...formData, [name]: value };
 
-    // auto calc study type
     if (name === "admission_date") {
       const admissionDate = new Date(value);
-      const cutoff = new Date("2025-10-06");
-      updated.study_type = admissionDate >= cutoff ? "Prospective" : "Retrospective";
+      const cutoffDate = new Date("2025-10-06");
+      updatedData.study_type = admissionDate >= cutoffDate ? "Prospective" : "Retrospective";
 
       if (formData.discharge_date) {
         const dischargeDate = new Date(formData.discharge_date);
         const diff = dischargeDate.getTime() - admissionDate.getTime();
-        updated.hospital_stay_days = `${Math.ceil(diff / (1000 * 60 * 60 * 24))}`;
+        updatedData.hospital_stay = `${Math.ceil(diff / (1000 * 60 * 60 * 24))} day(s)`;
       }
     }
 
-    // auto calc hospital stay
     if (name === "discharge_date" && formData.admission_date) {
       const admissionDate = new Date(formData.admission_date);
       const dischargeDate = new Date(value);
       const diff = dischargeDate.getTime() - admissionDate.getTime();
-      updated.hospital_stay_days = `${Math.ceil(diff / (1000 * 60 * 60 * 24))}`;
+      updatedData.hospital_stay = `${Math.ceil(diff / (1000 * 60 * 60 * 24))} day(s)`;
     }
 
-    setFormData(updated);
+    setFormData(updatedData);
   };
 
-  const combineDateTime = (date: string, time: string) => {
-    if (!date) return null;
-    const t = time || "00:00";
-    return new Date(`${date}T${t}:00`).toISOString();
+  // 🧭 Set active patient after selection or creation
+  const setActivePatient = async (patientId: string) => {
+    const userId = "00000000-0000-0000-0000-000000000001"; // placeholder
+    await supabase
+      .from("active_patient")
+      .upsert({ user_id: userId, patient_id: patientId }, { onConflict: "user_id" });
   };
 
+  // 💾 Save patient
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setMessage("");
 
-    const admission_datetime = combineDateTime(formData.admission_date, formData.admission_time);
-    const discharge_datetime = combineDateTime(formData.discharge_date, formData.discharge_time);
-    const procedure_datetime_cag = combineDateTime(formData.procedure_date_cag, formData.procedure_time_cag);
-    const procedure_datetime_ptca = combineDateTime(formData.procedure_date_ptca, formData.procedure_time_ptca);
-
-    const payload = {
-      ipd_number: formData.ipd_number,
-      patient_name: formData.patient_name,
-      age: formData.age ? Number(formData.age) : null,
-      sex: formData.sex,
-      admission_datetime,
-      discharge_datetime,
-      hospital_stay_days: formData.hospital_stay_days ? Number(formData.hospital_stay_days) : null,
-      study_type: formData.study_type,
-      procedure_type: formData.procedure_type,
-      procedure_datetime_cag,
-      procedure_datetime_ptca,
-    };
-
-    let error;
     if (selectedPatientId) {
-      ({ error } = await supabase.from("patient_details").update(payload).eq("id", selectedPatientId));
-    } else {
-      ({ error } = await supabase.from("patient_details").insert([payload]));
+      // just set active if existing patient selected
+      await setActivePatient(selectedPatientId);
+      setLoading(false);
+      setMessage("✅ Existing patient selected and set active!");
+      return;
     }
 
+    // Insert new patient
+    const { data, error } = await supabase
+      .from("patient_details")
+      .insert([
+        {
+          patient_name: formData.patient_name,
+          patient_id_hospital: formData.patient_id_hospital,
+          age: formData.age,
+          sex: formData.sex,
+          admission_date: formData.admission_date,
+          discharge_date: formData.discharge_date,
+          procedure_type: formData.procedure_type,
+          procedure_date_cag: formData.procedure_date_cag,
+          procedure_time_cag: formData.procedure_time_cag,
+          procedure_date_ptca: formData.procedure_date_ptca,
+          procedure_time_ptca: formData.procedure_time_ptca,
+          study_type: formData.study_type,
+          hospital_stay: formData.hospital_stay,
+        },
+      ])
+      .select("id")
+      .single();
+
     setLoading(false);
-    setMessage(error ? "❌ Failed to save patient." : "✅ Patient saved successfully!");
-    if (!error) resetForm();
+    if (error || !data) {
+      setMessage("❌ Failed to save patient.");
+    } else {
+      await setActivePatient(data.id);
+      setMessage("✅ New patient saved and set active!");
+      resetForm();
+    }
   };
 
   const resetForm = () => {
     setSelectedPatientId(null);
     setSearchTerm("");
     setFormData({
-      ipd_number: "",
       patient_name: "",
+      patient_id_hospital: "",
       age: "",
       sex: "",
       admission_date: "",
-      admission_time: "",
       discharge_date: "",
-      discharge_time: "",
       procedure_type: "",
       procedure_date_cag: "",
       procedure_time_cag: "",
       procedure_date_ptca: "",
       procedure_time_ptca: "",
       study_type: "",
-      hospital_stay_days: "",
+      hospital_stay: "",
     });
   };
 
+  // 🧑‍⚕️ Load patient details on selection
   const handleSelectPatient = async (id: string) => {
     setSelectedPatientId(id);
     setShowSuggestions(false);
     const { data } = await supabase.from("patient_details").select("*").eq("id", id).single();
     if (data) {
-      setSearchTerm(`${data.patient_name} — ${data.ipd_number}`);
-      setFormData({
-        ipd_number: data.ipd_number || "",
-        patient_name: data.patient_name || "",
-        age: data.age?.toString() || "",
-        sex: data.sex || "",
-        admission_date: data.admission_datetime ? new Date(data.admission_datetime).toISOString().slice(0, 10) : "",
-        admission_time: data.admission_datetime ? new Date(data.admission_datetime).toISOString().slice(11, 16) : "",
-        discharge_date: data.discharge_datetime ? new Date(data.discharge_datetime).toISOString().slice(0, 10) : "",
-        discharge_time: data.discharge_datetime ? new Date(data.discharge_datetime).toISOString().slice(11, 16) : "",
-        procedure_type: data.procedure_type || "",
-        procedure_date_cag: data.procedure_datetime_cag ? new Date(data.procedure_datetime_cag).toISOString().slice(0, 10) : "",
-        procedure_time_cag: data.procedure_datetime_cag ? new Date(data.procedure_datetime_cag).toISOString().slice(11, 16) : "",
-        procedure_date_ptca: data.procedure_datetime_ptca ? new Date(data.procedure_datetime_ptca).toISOString().slice(0, 10) : "",
-        procedure_time_ptca: data.procedure_datetime_ptca ? new Date(data.procedure_datetime_ptca).toISOString().slice(11, 16) : "",
-        study_type: data.study_type || "",
-        hospital_stay_days: data.hospital_stay_days?.toString() || "",
-      });
+      setFormData(data);
+      setSearchTerm(`${data.patient_name} — ${data.patient_id_hospital}`);
     }
   };
 
@@ -182,15 +174,15 @@ export default function PatientDetailsPage() {
     <div className="min-h-screen bg-gray-100 p-6 flex flex-col items-center">
       <h1 className="text-2xl font-bold mb-4 text-gray-800">🧑‍⚕️ Patient Details</h1>
 
-      <div className="mb-3 text-center font-semibold text-gray-700">
-        {selectedPatientId ? "✅ Existing patient selected" : "🆕 Add new patient"}
+      <div className="mb-4 text-center font-semibold text-gray-700">
+        {selectedPatientId ? "✅ Existing Patient Selected" : "🆕 New Patient Entry"}
       </div>
 
-      {/* Search bar */}
+      {/* Search */}
       <div className="relative mb-4 w-full max-w-xl">
         <input
           type="text"
-          placeholder="Search patient by name or IPD..."
+          placeholder="Search patient by name or Hospital ID..."
           value={searchTerm}
           onChange={(e) => {
             setSearchTerm(e.target.value);
@@ -206,16 +198,17 @@ export default function PatientDetailsPage() {
         >
           + Add New
         </button>
-        {showSuggestions && searchTerm && (
+
+        {showSuggestions && searchTerm.length > 0 && (
           <ul className="absolute z-10 bg-white border rounded w-full mt-1 max-h-48 overflow-y-auto shadow-lg">
-            {filteredPatients.length ? (
+            {filteredPatients.length > 0 ? (
               filteredPatients.map((p) => (
                 <li
                   key={p.id}
-                  className="p-2 cursor-pointer hover:bg-gray-100 text-gray-800"
                   onClick={() => handleSelectPatient(p.id)}
+                  className="p-2 cursor-pointer hover:bg-gray-100 text-gray-800"
                 >
-                  {p.patient_name} — {p.ipd_number}
+                  {p.patient_name} — {p.patient_id_hospital}
                 </li>
               ))
             ) : (
@@ -232,20 +225,19 @@ export default function PatientDetailsPage() {
       >
         <input
           type="text"
-          name="ipd_number"
-          placeholder="IPD Number"
-          value={formData.ipd_number}
+          name="patient_name"
+          placeholder="Patient Name"
+          value={formData.patient_name}
           onChange={handleChange}
           required
           className="border border-gray-400 text-gray-800 rounded p-2 w-full"
         />
         <input
           type="text"
-          name="patient_name"
-          placeholder="Patient Name"
-          value={formData.patient_name}
+          name="patient_id_hospital"
+          placeholder="Hospital ID"
+          value={formData.patient_id_hospital}
           onChange={handleChange}
-          required
           className="border border-gray-400 text-gray-800 rounded p-2 w-full"
         />
         <input
@@ -263,46 +255,26 @@ export default function PatientDetailsPage() {
           className="border border-gray-400 text-gray-800 rounded p-2 w-full"
         >
           <option value="">Select Sex</option>
-          <option value="Male">Male</option>
-          <option value="Female">Female</option>
+          <option value="M">Male</option>
+          <option value="F">Female</option>
         </select>
 
-        {/* Admission and discharge */}
-        <label className="font-semibold text-gray-800">Admission Date & Time</label>
-        <div className="grid grid-cols-2 gap-2">
-          <input
-            type="date"
-            name="admission_date"
-            value={formData.admission_date}
-            onChange={handleChange}
-            className="border border-gray-400 text-gray-800 rounded p-2 w-full"
-          />
-          <input
-            type="time"
-            name="admission_time"
-            value={formData.admission_time}
-            onChange={handleChange}
-            className="border border-gray-400 text-gray-800 rounded p-2 w-full"
-          />
-        </div>
-
-        <label className="font-semibold text-gray-800">Discharge Date & Time</label>
-        <div className="grid grid-cols-2 gap-2">
-          <input
-            type="date"
-            name="discharge_date"
-            value={formData.discharge_date}
-            onChange={handleChange}
-            className="border border-gray-400 text-gray-800 rounded p-2 w-full"
-          />
-          <input
-            type="time"
-            name="discharge_time"
-            value={formData.discharge_time}
-            onChange={handleChange}
-            className="border border-gray-400 text-gray-800 rounded p-2 w-full"
-          />
-        </div>
+        <label className="font-semibold text-gray-800">Date of Admission</label>
+        <input
+          type="date"
+          name="admission_date"
+          value={formData.admission_date}
+          onChange={handleChange}
+          className="border border-gray-400 text-gray-800 rounded p-2 w-full"
+        />
+        <label className="font-semibold text-gray-800">Date of Discharge</label>
+        <input
+          type="date"
+          name="discharge_date"
+          value={formData.discharge_date}
+          onChange={handleChange}
+          className="border border-gray-400 text-gray-800 rounded p-2 w-full"
+        />
 
         <input
           type="text"
@@ -314,14 +286,13 @@ export default function PatientDetailsPage() {
         />
         <input
           type="text"
-          name="hospital_stay_days"
-          placeholder="Hospital Stay (days)"
-          value={formData.hospital_stay_days}
+          name="hospital_stay"
+          placeholder="Hospital Stay"
+          value={formData.hospital_stay}
           readOnly
           className="border border-gray-400 text-gray-800 rounded p-2 w-full bg-gray-100"
         />
 
-        {/* Procedure */}
         <select
           name="procedure_type"
           value={formData.procedure_type}
@@ -331,51 +302,51 @@ export default function PatientDetailsPage() {
           <option value="">Select Procedure</option>
           <option value="CAG">CAG</option>
           <option value="PTCA">PTCA</option>
-          <option value="CAG+PTCA">CAG + PTCA</option>
+          <option value="CAG + PTCA">CAG + PTCA</option>
         </select>
 
         <label className="font-semibold text-gray-800">CAG Date & Time</label>
-        <div className="grid grid-cols-2 gap-2">
-          <input
-            type="date"
-            name="procedure_date_cag"
-            value={formData.procedure_date_cag}
-            onChange={handleChange}
-            className="border border-gray-400 text-gray-800 rounded p-2 w-full"
-          />
-          <input
-            type="time"
-            name="procedure_time_cag"
-            value={formData.procedure_time_cag}
-            onChange={handleChange}
-            className="border border-gray-400 text-gray-800 rounded p-2 w-full"
-          />
-        </div>
+        <input
+          type="date"
+          name="procedure_date_cag"
+          value={formData.procedure_date_cag}
+          onChange={handleChange}
+          className="border border-gray-400 text-gray-800 rounded p-2 w-full"
+        />
+        <input
+          type="time"
+          name="procedure_time_cag"
+          value={formData.procedure_time_cag}
+          onChange={handleChange}
+          className="border border-gray-400 text-gray-800 rounded p-2 w-full"
+        />
 
         <label className="font-semibold text-gray-800">PTCA Date & Time</label>
-        <div className="grid grid-cols-2 gap-2">
-          <input
-            type="date"
-            name="procedure_date_ptca"
-            value={formData.procedure_date_ptca}
-            onChange={handleChange}
-            className="border border-gray-400 text-gray-800 rounded p-2 w-full"
-          />
-          <input
-            type="time"
-            name="procedure_time_ptca"
-            value={formData.procedure_time_ptca}
-            onChange={handleChange}
-            className="border border-gray-400 text-gray-800 rounded p-2 w-full"
-          />
-        </div>
+        <input
+          type="date"
+          name="procedure_date_ptca"
+          value={formData.procedure_date_ptca}
+          onChange={handleChange}
+          className="border border-gray-400 text-gray-800 rounded p-2 w-full"
+        />
+        <input
+          type="time"
+          name="procedure_time_ptca"
+          value={formData.procedure_time_ptca}
+          onChange={handleChange}
+          className="border border-gray-400 text-gray-800 rounded p-2 w-full"
+        />
 
         <button
           type="submit"
           disabled={loading}
           className="bg-blue-600 text-white px-4 py-2 rounded w-full hover:bg-blue-700"
         >
-          {loading ? "Saving..." : selectedPatientId ? "Update Patient" : "Save New Patient"}
+          {loading
+            ? "Saving..."
+            : selectedPatientId
+            ? "Select Existing Patient"
+            : "Save New Patient"}
         </button>
 
         {message && <p className="text-center text-sm mt-2 text-gray-800">{message}</p>}
