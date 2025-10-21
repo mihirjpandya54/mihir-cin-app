@@ -347,7 +347,7 @@ export default function PatientDetailsPage() {
           <option value="">Select Procedure</option>
           <option value="CAG">CAG</option>
           <option value="PTCA">PTCA</option>
-          <option value="CAG + PTCA">CAG + PTCA</option>
+          <option value="CAG+PTCA">CAG + PTCA</option>
         </select>
 
         <label className="font-semibold text-gray-800">CAG Date & Time</label>
