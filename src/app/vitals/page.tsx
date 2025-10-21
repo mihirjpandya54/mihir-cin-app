@@ -11,14 +11,14 @@ const supabase = createClient(
 type VitalsRow = {
   id?: string;
   patient_id: string;
-  temperature_f: number | null;
-  pulse_per_min: number | null;
-  sbp_mmhg: number | null;
-  dbp_mmhg: number | null;
-  resp_rate_cpm: number | null;
-  spo2_percent: number | null;
-  rbs_mg_dl: number | null;
-  map_mmhg: number | null;
+  temperature: number | null;
+  pulse_rate: number | null;
+  sbp: number | null;
+  dbp: number | null;
+  resp_rate: number | null;
+  spo2: number | null;
+  rbs: number | null;
+  map: number | null;
   hypotension_flag: boolean | null;
 };
 
@@ -26,14 +26,14 @@ export default function OnArrivalVitalsPage() {
   const [patientId, setPatientId] = useState<string | null>(null);
   const [vitals, setVitals] = useState<VitalsRow>({
     patient_id: "",
-    temperature_f: null,
-    pulse_per_min: null,
-    sbp_mmhg: null,
-    dbp_mmhg: null,
-    resp_rate_cpm: null,
-    spo2_percent: null,
-    rbs_mg_dl: null,
-    map_mmhg: null,
+    temperature: null,
+    pulse_rate: null,
+    sbp: null,
+    dbp: null,
+    resp_rate: null,
+    spo2: null,
+    rbs: null,
+    map: null,
     hypotension_flag: null,
   });
   const [existingRowId, setExistingRowId] = useState<string | null>(null);
@@ -44,13 +44,13 @@ export default function OnArrivalVitalsPage() {
   useEffect(() => {
     (async () => {
       const userId = "00000000-0000-0000-0000-000000000001";
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from("active_patient")
         .select("patient_id")
         .eq("user_id", userId)
         .maybeSingle();
 
-      if (data && data.patient_id) {
+      if (data?.patient_id) {
         setPatientId(data.patient_id);
       } else {
         setMessage("⚠️ No active patient selected. Go to Patient Page first.");
@@ -58,11 +58,11 @@ export default function OnArrivalVitalsPage() {
     })();
   }, []);
 
-  // 🩺 Step 2: Fetch existing vitals for active patient
+  // 🩺 Step 2: Fetch existing vitals if present
   useEffect(() => {
     if (!patientId) return;
     (async () => {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from("on_arrival_vitals")
         .select("*")
         .eq("patient_id", patientId)
@@ -72,14 +72,14 @@ export default function OnArrivalVitalsPage() {
         setExistingRowId(data.id);
         setVitals({
           patient_id: patientId,
-          temperature_f: data.temperature_f,
-          pulse_per_min: data.pulse_per_min,
-          sbp_mmhg: data.sbp_mmhg,
-          dbp_mmhg: data.dbp_mmhg,
-          resp_rate_cpm: data.resp_rate_cpm,
-          spo2_percent: data.spo2_percent,
-          rbs_mg_dl: data.rbs_mg_dl,
-          map_mmhg: data.map_mmhg,
+          temperature: data.temperature,
+          pulse_rate: data.pulse_rate,
+          sbp: data.sbp,
+          dbp: data.dbp,
+          resp_rate: data.resp_rate,
+          spo2: data.spo2,
+          rbs: data.rbs,
+          map: data.map,
           hypotension_flag: data.hypotension_flag,
         });
       } else {
@@ -89,28 +89,29 @@ export default function OnArrivalVitalsPage() {
     })();
   }, [patientId]);
 
-  // 🧮 Auto-calc MAP and hypotension
+  // 🧮 Auto-calc MAP & hypotension
   const derivedMap = useMemo(() => {
-    if (vitals.sbp_mmhg == null || vitals.dbp_mmhg == null) return null;
-    const map = (Number(vitals.sbp_mmhg) + 2 * Number(vitals.dbp_mmhg)) / 3;
-    return Math.round(map * 10) / 10;
-  }, [vitals.sbp_mmhg, vitals.dbp_mmhg]);
+    if (vitals.sbp == null || vitals.dbp == null) return null;
+    const mapVal = (Number(vitals.sbp) + 2 * Number(vitals.dbp)) / 3;
+    return Math.round(mapVal * 10) / 10;
+  }, [vitals.sbp, vitals.dbp]);
 
   const derivedHypotension = useMemo(() => {
-    const sbp = vitals.sbp_mmhg == null ? null : Number(vitals.sbp_mmhg);
-    const map = derivedMap;
-    if (sbp == null && map == null) return null;
-    return (sbp != null && sbp < 90) || (map != null && map < 65);
-  }, [vitals.sbp_mmhg, derivedMap]);
+    const sbpVal = vitals.sbp == null ? null : Number(vitals.sbp);
+    const mapVal = derivedMap;
+    if (sbpVal == null && mapVal == null) return null;
+    return (sbpVal != null && sbpVal < 90) || (mapVal != null && mapVal < 65);
+  }, [vitals.sbp, derivedMap]);
 
   useEffect(() => {
     setVitals((prev) => ({
       ...prev,
-      map_mmhg: derivedMap,
+      map: derivedMap,
       hypotension_flag: derivedHypotension,
     }));
   }, [derivedMap, derivedHypotension]);
 
+  // handle input
   const handleNum = (name: keyof VitalsRow) => (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value === "" ? null : Number(e.target.value);
     setVitals((v) => ({ ...v, [name]: val }));
@@ -126,14 +127,14 @@ export default function OnArrivalVitalsPage() {
 
     const payload = {
       patient_id: patientId,
-      temperature_f: vitals.temperature_f,
-      pulse_per_min: vitals.pulse_per_min,
-      sbp_mmhg: vitals.sbp_mmhg,
-      dbp_mmhg: vitals.dbp_mmhg,
-      resp_rate_cpm: vitals.resp_rate_cpm,
-      spo2_percent: vitals.spo2_percent,
-      rbs_mg_dl: vitals.rbs_mg_dl,
-      map_mmhg: vitals.map_mmhg,
+      temperature: vitals.temperature,
+      pulse_rate: vitals.pulse_rate,
+      sbp: vitals.sbp,
+      dbp: vitals.dbp,
+      resp_rate: vitals.resp_rate,
+      spo2: vitals.spo2,
+      rbs: vitals.rbs,
+      map: vitals.map,
       hypotension_flag: vitals.hypotension_flag,
     };
 
@@ -175,8 +176,8 @@ export default function OnArrivalVitalsPage() {
                 type="number"
                 step="0.1"
                 className="border border-gray-400 text-gray-800 rounded p-2 w-full"
-                value={vitals.temperature_f ?? ""}
-                onChange={handleNum("temperature_f")}
+                value={vitals.temperature ?? ""}
+                onChange={handleNum("temperature")}
               />
             </div>
 
@@ -185,8 +186,8 @@ export default function OnArrivalVitalsPage() {
               <input
                 type="number"
                 className="border border-gray-400 text-gray-800 rounded p-2 w-full"
-                value={vitals.pulse_per_min ?? ""}
-                onChange={handleNum("pulse_per_min")}
+                value={vitals.pulse_rate ?? ""}
+                onChange={handleNum("pulse_rate")}
               />
             </div>
 
@@ -195,8 +196,8 @@ export default function OnArrivalVitalsPage() {
               <input
                 type="number"
                 className="border border-gray-400 text-gray-800 rounded p-2 w-full"
-                value={vitals.sbp_mmhg ?? ""}
-                onChange={handleNum("sbp_mmhg")}
+                value={vitals.sbp ?? ""}
+                onChange={handleNum("sbp")}
               />
             </div>
 
@@ -205,8 +206,8 @@ export default function OnArrivalVitalsPage() {
               <input
                 type="number"
                 className="border border-gray-400 text-gray-800 rounded p-2 w-full"
-                value={vitals.dbp_mmhg ?? ""}
-                onChange={handleNum("dbp_mmhg")}
+                value={vitals.dbp ?? ""}
+                onChange={handleNum("dbp")}
               />
             </div>
 
@@ -215,8 +216,8 @@ export default function OnArrivalVitalsPage() {
               <input
                 type="number"
                 className="border border-gray-400 text-gray-800 rounded p-2 w-full"
-                value={vitals.resp_rate_cpm ?? ""}
-                onChange={handleNum("resp_rate_cpm")}
+                value={vitals.resp_rate ?? ""}
+                onChange={handleNum("resp_rate")}
               />
             </div>
 
@@ -226,8 +227,8 @@ export default function OnArrivalVitalsPage() {
                 type="number"
                 step="0.1"
                 className="border border-gray-400 text-gray-800 rounded p-2 w-full"
-                value={vitals.spo2_percent ?? ""}
-                onChange={handleNum("spo2_percent")}
+                value={vitals.spo2 ?? ""}
+                onChange={handleNum("spo2")}
               />
             </div>
 
@@ -236,8 +237,8 @@ export default function OnArrivalVitalsPage() {
               <input
                 type="number"
                 className="border border-gray-400 text-gray-800 rounded p-2 w-full"
-                value={vitals.rbs_mg_dl ?? ""}
-                onChange={handleNum("rbs_mg_dl")}
+                value={vitals.rbs ?? ""}
+                onChange={handleNum("rbs")}
               />
             </div>
 
