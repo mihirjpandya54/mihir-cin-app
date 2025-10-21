@@ -4,8 +4,9 @@ import Link from "next/link";
 export default function Home() {
   const sections = [
     { name: "🧑‍⚕️ Patient Details", path: "/patient" },
+    { name: "🩺 On Arrival Vitals", path: "/vitals" },
     { name: "📜 History", path: "/history" },
-    { name: "🩺 Vitals & Monitoring", path: "/vitals" },
+    { name: "💊 Past Medication History", path: "/past-medications" },
     { name: "🧪 Lab Reports", path: "/labs" },
     { name: "💊 Medications", path: "/medications" },
     { name: "🫀 Procedures", path: "/procedures" },
