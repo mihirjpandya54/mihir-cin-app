@@ -84,39 +84,54 @@ export default function PatientDetailsPage() {
     setFormData(updatedData);
   };
 
+  const setActivePatient = async (patientId: string) => {
+    // simple default user_id for now
+    const userId = "00000000-0000-0000-0000-000000000001";
+    await supabase.from("active_patient").upsert({ user_id: userId, patient_id: patientId });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setMessage("");
 
+    // If existing patient selected
     if (selectedPatientId) {
-      setMessage("✅ Existing patient selected — no new row created.");
+      await setActivePatient(selectedPatientId);
+      setMessage("✅ Existing patient selected.");
       setLoading(false);
       return;
     }
 
-    const { error } = await supabase.from("patient_details").insert([
-      {
-        patient_name: formData.patient_name,
-        patient_id_hospital: formData.patient_id_hospital,
-        age: formData.age,
-        sex: formData.sex,
-        admission_date: formData.admission_date,
-        discharge_date: formData.discharge_date,
-        procedure_type: formData.procedure_type,
-        procedure_date_cag: formData.procedure_date_cag,
-        procedure_time_cag: formData.procedure_time_cag,
-        procedure_date_ptca: formData.procedure_date_ptca,
-        procedure_time_ptca: formData.procedure_time_ptca,
-        study_type: formData.study_type,
-        hospital_stay: formData.hospital_stay,
-      },
-    ]);
+    // If new patient
+    const { data, error } = await supabase
+      .from("patient_details")
+      .insert([
+        {
+          patient_name: formData.patient_name,
+          patient_id_hospital: formData.patient_id_hospital,
+          age: formData.age,
+          sex: formData.sex,
+          admission_date: formData.admission_date,
+          discharge_date: formData.discharge_date,
+          procedure_type: formData.procedure_type,
+          procedure_date_cag: formData.procedure_date_cag,
+          procedure_time_cag: formData.procedure_time_cag,
+          procedure_date_ptca: formData.procedure_date_ptca,
+          procedure_time_ptca: formData.procedure_time_ptca,
+          study_type: formData.study_type,
+          hospital_stay: formData.hospital_stay,
+        },
+      ])
+      .select("id")
+      .single();
 
     setLoading(false);
-    if (error) setMessage("❌ Failed to save patient.");
-    else {
-      setMessage("✅ New patient created!");
+    if (error || !data) {
+      setMessage("❌ Failed to save patient.");
+    } else {
+      await setActivePatient(data.id);
+      setMessage("✅ New patient created & set active!");
       resetForm();
     }
   };
@@ -148,6 +163,7 @@ export default function PatientDetailsPage() {
     if (data) {
       setFormData(data);
       setSearchTerm(`${data.patient_name} — ${data.patient_id_hospital}`);
+      await setActivePatient(id);
     }
   };
 
@@ -155,7 +171,6 @@ export default function PatientDetailsPage() {
     <div className="min-h-screen bg-gray-100 p-6 flex flex-col items-center">
       <h1 className="text-2xl font-bold mb-4 text-gray-800">🧑‍⚕️ Patient Details</h1>
 
-      {/* Status Banner */}
       <div className="mb-4 text-center font-semibold text-gray-700">
         {selectedPatientId ? "✅ Existing Patient Selected" : "🆕 New Patient Entry"}
       </div>
