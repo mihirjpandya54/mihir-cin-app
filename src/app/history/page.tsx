@@ -182,7 +182,7 @@ export default function HistoryPage() {
               <div key={c.key} className="flex items-center gap-2">
                 <input
                   type="checkbox"
-                  checked={history[c.key as keyof HistoryRow] || false}
+                  checked={Boolean(history[c.key as keyof HistoryRow])}
                   onChange={handleCheck(c.key as keyof HistoryRow)}
                   className="h-5 w-5"
                 />
@@ -233,7 +233,7 @@ export default function HistoryPage() {
               <label className="flex items-center gap-2">
                 <input
                   type="checkbox"
-                  checked={history.social_smoking || false}
+                  checked={Boolean(history.social_smoking)}
                   onChange={handleCheck("social_smoking")}
                   className="h-5 w-5"
                 />
@@ -242,7 +242,7 @@ export default function HistoryPage() {
               <label className="flex items-center gap-2">
                 <input
                   type="checkbox"
-                  checked={history.social_alcohol || false}
+                  checked={Boolean(history.social_alcohol)}
                   onChange={handleCheck("social_alcohol")}
                   className="h-5 w-5"
                 />
