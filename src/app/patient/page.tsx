@@ -39,7 +39,6 @@ export default function PatientDetailsPage() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
 
-  // 🧭 Fetch all patients
   useEffect(() => {
     const fetchPatients = async () => {
       const { data, error } = await supabase
@@ -51,7 +50,6 @@ export default function PatientDetailsPage() {
     fetchPatients();
   }, []);
 
-  // 🔍 Filtered suggestions
   const filteredPatients = patients.filter(
     (p) =>
       p.patient_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -154,10 +152,15 @@ export default function PatientDetailsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6 flex flex-col items-center">
+    <div className="min-h-screen bg-gray-100 p-6 flex flex-col items-center">
       <h1 className="text-2xl font-bold mb-4 text-gray-800">🧑‍⚕️ Patient Details</h1>
 
-      {/* 🔍 Autocomplete Search */}
+      {/* Status Banner */}
+      <div className="mb-4 text-center font-semibold text-gray-700">
+        {selectedPatientId ? "✅ Existing Patient Selected" : "🆕 New Patient Entry"}
+      </div>
+
+      {/* Search */}
       <div className="relative mb-4 w-full max-w-xl">
         <input
           type="text"
@@ -168,7 +171,7 @@ export default function PatientDetailsPage() {
             setShowSuggestions(true);
           }}
           onFocus={() => setShowSuggestions(true)}
-          className="border rounded p-2 w-full"
+          className="border border-gray-400 text-gray-800 rounded p-2 w-full"
         />
         <button
           type="button"
@@ -185,7 +188,7 @@ export default function PatientDetailsPage() {
                 <li
                   key={p.id}
                   onClick={() => handleSelectPatient(p.id)}
-                  className="p-2 cursor-pointer hover:bg-gray-100"
+                  className="p-2 cursor-pointer hover:bg-gray-100 text-gray-800"
                 >
                   {p.patient_name} — {p.patient_id_hospital}
                 </li>
@@ -197,7 +200,7 @@ export default function PatientDetailsPage() {
         )}
       </div>
 
-      {/* 📝 Patient Form */}
+      {/* Form */}
       <form
         onSubmit={handleSubmit}
         className="bg-white p-6 rounded-lg shadow-lg w-full max-w-xl space-y-4"
@@ -209,7 +212,7 @@ export default function PatientDetailsPage() {
           value={formData.patient_name}
           onChange={handleChange}
           required
-          className="border rounded p-2 w-full"
+          className="border border-gray-400 text-gray-800 rounded p-2 w-full"
         />
         <input
           type="text"
@@ -217,7 +220,7 @@ export default function PatientDetailsPage() {
           placeholder="Hospital ID"
           value={formData.patient_id_hospital}
           onChange={handleChange}
-          className="border rounded p-2 w-full"
+          className="border border-gray-400 text-gray-800 rounded p-2 w-full"
         />
         <input
           type="number"
@@ -225,34 +228,34 @@ export default function PatientDetailsPage() {
           placeholder="Age"
           value={formData.age}
           onChange={handleChange}
-          className="border rounded p-2 w-full"
+          className="border border-gray-400 text-gray-800 rounded p-2 w-full"
         />
         <select
           name="sex"
           value={formData.sex}
           onChange={handleChange}
-          className="border rounded p-2 w-full"
+          className="border border-gray-400 text-gray-800 rounded p-2 w-full"
         >
           <option value="">Select Sex</option>
           <option value="M">Male</option>
           <option value="F">Female</option>
         </select>
 
-        <label className="font-semibold text-gray-700">Date of Admission</label>
+        <label className="font-semibold text-gray-800">Date of Admission</label>
         <input
           type="date"
           name="admission_date"
           value={formData.admission_date}
           onChange={handleChange}
-          className="border rounded p-2 w-full"
+          className="border border-gray-400 text-gray-800 rounded p-2 w-full"
         />
-        <label className="font-semibold text-gray-700">Date of Discharge</label>
+        <label className="font-semibold text-gray-800">Date of Discharge</label>
         <input
           type="date"
           name="discharge_date"
           value={formData.discharge_date}
           onChange={handleChange}
-          className="border rounded p-2 w-full"
+          className="border border-gray-400 text-gray-800 rounded p-2 w-full"
         />
 
         <input
@@ -261,7 +264,7 @@ export default function PatientDetailsPage() {
           placeholder="Study Type"
           value={formData.study_type}
           readOnly
-          className="border rounded p-2 w-full bg-gray-100"
+          className="border border-gray-400 text-gray-800 rounded p-2 w-full bg-gray-100"
         />
         <input
           type="text"
@@ -269,14 +272,14 @@ export default function PatientDetailsPage() {
           placeholder="Hospital Stay"
           value={formData.hospital_stay}
           readOnly
-          className="border rounded p-2 w-full bg-gray-100"
+          className="border border-gray-400 text-gray-800 rounded p-2 w-full bg-gray-100"
         />
 
         <select
           name="procedure_type"
           value={formData.procedure_type}
           onChange={handleChange}
-          className="border rounded p-2 w-full"
+          className="border border-gray-400 text-gray-800 rounded p-2 w-full"
         >
           <option value="">Select Procedure</option>
           <option value="CAG">CAG</option>
@@ -284,36 +287,36 @@ export default function PatientDetailsPage() {
           <option value="CAG + PTCA">CAG + PTCA</option>
         </select>
 
-        <label className="font-semibold text-gray-700">CAG Date & Time</label>
+        <label className="font-semibold text-gray-800">CAG Date & Time</label>
         <input
           type="date"
           name="procedure_date_cag"
           value={formData.procedure_date_cag}
           onChange={handleChange}
-          className="border rounded p-2 w-full"
+          className="border border-gray-400 text-gray-800 rounded p-2 w-full"
         />
         <input
           type="time"
           name="procedure_time_cag"
           value={formData.procedure_time_cag}
           onChange={handleChange}
-          className="border rounded p-2 w-full"
+          className="border border-gray-400 text-gray-800 rounded p-2 w-full"
         />
 
-        <label className="font-semibold text-gray-700">PTCA Date & Time</label>
+        <label className="font-semibold text-gray-800">PTCA Date & Time</label>
         <input
           type="date"
           name="procedure_date_ptca"
           value={formData.procedure_date_ptca}
           onChange={handleChange}
-          className="border rounded p-2 w-full"
+          className="border border-gray-400 text-gray-800 rounded p-2 w-full"
         />
         <input
           type="time"
           name="procedure_time_ptca"
           value={formData.procedure_time_ptca}
           onChange={handleChange}
-          className="border rounded p-2 w-full"
+          className="border border-gray-400 text-gray-800 rounded p-2 w-full"
         />
 
         <button
@@ -328,7 +331,7 @@ export default function PatientDetailsPage() {
             : "Save New Patient"}
         </button>
 
-        {message && <p className="text-center text-sm mt-2">{message}</p>}
+        {message && <p className="text-center text-sm mt-2 text-gray-800">{message}</p>}
       </form>
     </div>
   );
