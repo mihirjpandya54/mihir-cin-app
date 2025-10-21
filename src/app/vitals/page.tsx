@@ -24,6 +24,8 @@ type VitalsRow = {
 
 export default function OnArrivalVitalsPage() {
   const [patientId, setPatientId] = useState<string | null>(null);
+  const [patientInfo, setPatientInfo] = useState<{ name: string; ipd: string } | null>(null);
+
   const [vitals, setVitals] = useState<VitalsRow>({
     patient_id: "",
     temperature: null,
@@ -40,18 +42,32 @@ export default function OnArrivalVitalsPage() {
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
 
-  // 🧭 Step 1: Fetch active patient
+  // 🧭 Step 1: Fetch active patient + info
   useEffect(() => {
     (async () => {
       const userId = "00000000-0000-0000-0000-000000000001";
-      const { data } = await supabase
+      const { data: active } = await supabase
         .from("active_patient")
         .select("patient_id")
         .eq("user_id", userId)
         .maybeSingle();
 
-      if (data?.patient_id) {
-        setPatientId(data.patient_id);
+      if (active?.patient_id) {
+        setPatientId(active.patient_id);
+
+        // Fetch patient name & IPD number
+        const { data: patient } = await supabase
+          .from("patient_details")
+          .select("patient_name, ipd_number")
+          .eq("id", active.patient_id)
+          .single();
+
+        if (patient) {
+          setPatientInfo({
+            name: patient.patient_name,
+            ipd: patient.ipd_number,
+          });
+        }
       } else {
         setMessage("⚠️ No active patient selected. Go to Patient Page first.");
       }
@@ -157,6 +173,14 @@ export default function OnArrivalVitalsPage() {
   return (
     <div className="min-h-screen bg-gray-100 p-6 flex flex-col items-center">
       <h1 className="text-2xl font-bold mb-4 text-gray-800">🩺 On-Arrival Vitals</h1>
+
+      {/* ✅ Active patient info */}
+      {patientInfo && (
+        <div className="mb-4 text-lg font-semibold text-gray-800 bg-blue-50 border border-blue-300 rounded p-3 w-full max-w-xl text-center">
+          🧑 Patient: <span className="font-bold">{patientInfo.name}</span> — IPD:{" "}
+          <span className="font-mono">{patientInfo.ipd}</span>
+        </div>
+      )}
 
       {!patientId && (
         <div className="mb-3 text-center font-semibold text-red-600">
