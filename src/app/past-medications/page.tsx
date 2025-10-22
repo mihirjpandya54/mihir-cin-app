@@ -17,11 +17,14 @@ type MedRow = {
   last_dose_taken: string | null;
   continue_flag: boolean | null;
   discontinue_flag: boolean | null;
+  time_diff_hours?: number | null;
+  nephro_flag?: boolean | null;
 };
 
 export default function PastMedicationsPage() {
   const [patientId, setPatientId] = useState<string | null>(null);
   const [patientInfo, setPatientInfo] = useState<{ name: string; ipd: string } | null>(null);
+  const [procedureTime, setProcedureTime] = useState<Date | null>(null);
   const [medications, setMedications] = useState<MedRow[]>([]);
   const [newMed, setNewMed] = useState<MedRow>({
     patient_id: "",
@@ -35,45 +38,88 @@ export default function PastMedicationsPage() {
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
 
-  // 🧭 1. Load active patient
+  // 🧭 Load active patient + procedure time
   useEffect(() => {
     (async () => {
       const userId = "00000000-0000-0000-0000-000000000001";
+
+      // Get active patient ID
       const { data: active } = await supabase
         .from("active_patient")
         .select("patient_id")
         .eq("user_id", userId)
         .maybeSingle();
 
-      if (active?.patient_id) {
-        setPatientId(active.patient_id);
-        setNewMed((m) => ({ ...m, patient_id: active.patient_id }));
-
-        const { data: p } = await supabase
-          .from("patient_details")
-          .select("patient_name, ipd_number")
-          .eq("id", active.patient_id)
-          .single();
-
-        if (p) setPatientInfo({ name: p.patient_name, ipd: p.ipd_number });
-
-        const { data: meds } = await supabase
-          .from("past_medication_history")
-          .select("*")
-          .eq("patient_id", active.patient_id);
-
-        if (meds) setMedications(meds);
-      } else {
+      if (!active?.patient_id) {
         setMessage("⚠️ No active patient selected. Go to Patient Page first.");
+        return;
       }
+
+      setPatientId(active.patient_id);
+      setNewMed((m) => ({ ...m, patient_id: active.patient_id }));
+
+      // Patient info
+      const { data: p } = await supabase
+        .from("patient_details")
+        .select("patient_name, ipd_number, procedure_datetime_cag, procedure_datetime_ptca, procedure_type")
+        .eq("id", active.patient_id)
+        .single();
+
+      if (p) {
+        setPatientInfo({ name: p.patient_name, ipd: p.ipd_number });
+        // Use procedure time based on procedure_type
+        const proc =
+          p.procedure_type === "PTCA"
+            ? p.procedure_datetime_ptca
+            : p.procedure_datetime_cag;
+        if (proc) setProcedureTime(new Date(proc));
+      }
+
+      // Medications
+      const { data: meds } = await supabase
+        .from("past_medication_history")
+        .select("*")
+        .eq("patient_id", active.patient_id);
+
+      if (meds) setMedications(meds);
     })();
   }, []);
+
+  // 🧮 Calculate nephro flag + time difference
+  const calculateNephroData = async (medName: string, lastDose: string, cont: boolean, disc: boolean) => {
+    if (!procedureTime || !lastDose) return { timeDiff: null, nephro: false };
+
+    const lastDoseTime = new Date(lastDose);
+    const diffMs = procedureTime.getTime() - lastDoseTime.getTime();
+    const diffHours = diffMs / (1000 * 60 * 60);
+
+    // Check if medication is nephrotoxic
+    const { data: med } = await supabase
+      .from("medications_master")
+      .select("is_nephrotoxic")
+      .ilike("drug_name", medName)
+      .maybeSingle();
+
+    const isNephrotoxic = med?.is_nephrotoxic ?? false;
+
+    let nephroFlag = false;
+    if (isNephrotoxic) {
+      if (diffHours <= 72) {
+        nephroFlag = true;
+      } else if (cont) {
+        nephroFlag = true;
+      } else {
+        nephroFlag = false;
+      }
+    }
+
+    return { timeDiff: Math.round(diffHours * 10) / 10, nephro: nephroFlag };
+  };
 
   // 📝 Add new medication
   const addMedication = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!patientId) return;
-
     if (!newMed.medication_name.trim()) {
       setMessage("❌ Medication name is required.");
       return;
@@ -81,9 +127,19 @@ export default function PastMedicationsPage() {
 
     setSaving(true);
 
+    const { timeDiff, nephro } = await calculateNephroData(
+      newMed.medication_name,
+      newMed.last_dose_taken || "",
+      !!newMed.continue_flag,
+      !!newMed.discontinue_flag
+    );
+
     const payload = {
       ...newMed,
       patient_id: patientId,
+      last_dose_taken: newMed.last_dose_taken || null,
+      time_diff_hours: timeDiff,
+      nephro_flag: nephro,
     };
 
     const { data, error } = await supabase
@@ -111,14 +167,25 @@ export default function PastMedicationsPage() {
     }
   };
 
-  // ✍️ Update medication row (checkbox or text)
+  // ✍️ Update medication row
   const updateMedication = async (id: string, field: keyof MedRow, value: any) => {
-    const updated = medications.map((m) => (m.id === id ? { ...m, [field]: value } : m));
-    setMedications(updated);
+    const updatedList = medications.map((m) => (m.id === id ? { ...m, [field]: value } : m));
+    setMedications(updatedList);
+
+    const med = updatedList.find((m) => m.id === id);
+    if (!med) return;
+
+    // Recalculate nephro flag and time diff on update
+    const { timeDiff, nephro } = await calculateNephroData(
+      med.medication_name,
+      med.last_dose_taken || "",
+      !!med.continue_flag,
+      !!med.discontinue_flag
+    );
 
     await supabase
       .from("past_medication_history")
-      .update({ [field]: value })
+      .update({ ...med, [field]: value, time_diff_hours: timeDiff, nephro_flag: nephro })
       .eq("id", id);
   };
 
@@ -145,7 +212,6 @@ export default function PastMedicationsPage() {
         </div>
       )}
 
-      {/* Add new medication */}
       {patientId && (
         <form
           onSubmit={addMedication}
@@ -172,9 +238,9 @@ export default function PastMedicationsPage() {
             onChange={(e) => setNewMed({ ...newMed, frequency: e.target.value })}
             className="border border-gray-400 text-gray-800 rounded p-2 w-full"
           />
+          <label className="block text-gray-800 font-semibold">Last Dose Taken</label>
           <input
-            type="text"
-            placeholder="Last Dose Taken"
+            type="datetime-local"
             value={newMed.last_dose_taken || ""}
             onChange={(e) => setNewMed({ ...newMed, last_dose_taken: e.target.value })}
             className="border border-gray-400 text-gray-800 rounded p-2 w-full"
@@ -211,7 +277,6 @@ export default function PastMedicationsPage() {
         </form>
       )}
 
-      {/* Medication list */}
       {medications.length > 0 && (
         <div className="bg-white p-4 rounded-lg shadow-md w-full max-w-2xl">
           <h2 className="text-xl font-semibold mb-3 text-gray-800">📝 Existing Medications</h2>
@@ -228,6 +293,7 @@ export default function PastMedicationsPage() {
                     ✕
                   </button>
                 </div>
+
                 <input
                   type="text"
                   value={m.dose || ""}
@@ -243,29 +309,35 @@ export default function PastMedicationsPage() {
                   placeholder="Frequency"
                 />
                 <input
-                  type="text"
+                  type="datetime-local"
                   value={m.last_dose_taken || ""}
                   onChange={(e) => updateMedication(m.id!, "last_dose_taken", e.target.value)}
                   className="border border-gray-300 rounded p-1 w-full mb-2"
-                  placeholder="Last Dose"
                 />
-                <div className="flex gap-4">
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={Boolean(m.continue_flag)}
-                      onChange={(e) => updateMedication(m.id!, "continue_flag", e.target.checked)}
-                    />
-                    Continue
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={Boolean(m.discontinue_flag)}
-                      onChange={(e) => updateMedication(m.id!, "discontinue_flag", e.target.checked)}
-                    />
-                    Discontinue
-                  </label>
+
+                <div className="flex justify-between items-center">
+                  <div className="flex gap-4">
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(m.continue_flag)}
+                        onChange={(e) => updateMedication(m.id!, "continue_flag", e.target.checked)}
+                      />
+                      Continue
+                    </label>
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(m.discontinue_flag)}
+                        onChange={(e) => updateMedication(m.id!, "discontinue_flag", e.target.checked)}
+                      />
+                      Discontinue
+                    </label>
+                  </div>
+
+                  {m.nephro_flag && (
+                    <span className="text-red-600 font-semibold">⚠️ Nephrotoxic (within 72h)</span>
+                  )}
                 </div>
               </li>
             ))}
