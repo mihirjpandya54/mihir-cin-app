@@ -5,6 +5,7 @@ export default function Home() {
   const sections = [
     { name: "🧑‍⚕️ Patient Details", path: "/patient" },
     { name: "🩺 On Arrival Vitals", path: "/vitals" },
+    { name: "🩺 Chief Complaints & Diagnosis", path: "/chief-complaints-diagnosis" },
     { name: "📜 History", path: "/history" },
     { name: "💊 Past Medication History", path: "/past-medications" },
     { name: "🧪 Lab Reports", path: "/labs" },
