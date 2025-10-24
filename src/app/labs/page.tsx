@@ -454,7 +454,7 @@ export default function LabsPage() {
             <input
               readOnly
               value={
-               (lab?.scr && patient ? calculateEGFR(lab.scr!, patient.age ?? 0, patient.sex!).toFixed(2) : '') 
+               (lab?.scr && patient ? (calculateEGFR(lab.scr!, patient.age ?? 0, patient.sex!) ?? 0).toFixed(2) : '')
               }
               className="w-full p-2 rounded border border-gray-300 bg-gray-50"
             />
