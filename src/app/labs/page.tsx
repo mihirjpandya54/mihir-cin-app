@@ -1,6 +1,6 @@
 // 📁 pages/Labs.tsx
 import { useEffect, useState } from "react";
-import { supabase } from "../../../../lib/supabaseClient";
+import { supabase } from "@lib/supabaseClient";
 
 interface PatientInfo {
   id: string;
