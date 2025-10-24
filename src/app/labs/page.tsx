@@ -1,7 +1,6 @@
 // 📁 pages/Labs.tsx
 import { useEffect, useState } from "react";
-import { supabase } from "../supabaseClient";
-import dayjs from "dayjs";
+import { supabase } from "../../lib/supabaseClient";
 
 interface PatientInfo {
   id: string;
