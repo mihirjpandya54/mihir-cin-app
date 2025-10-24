@@ -316,7 +316,7 @@ export default function LabsPage() {
     } else {
       const res = await supabase
         .from('lab_results')
-        .insert([{ ...lab, patient_id: patient.id, lab_date }])
+        .insert([{ ...lab, patient_id: patient.id, lab_date: labDate }])
         .select()
         .single();
       error = res.error;
