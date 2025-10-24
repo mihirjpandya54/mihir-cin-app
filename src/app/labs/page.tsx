@@ -344,7 +344,7 @@ export default function LabsPage() {
           <label className="block font-semibold mb-1 text-gray-900">Lab Date</label>
           <input
             type="date"
-            className="p-2 border rounded w-full"
+            className="p-2 border rounded w-full text-gray-900"
             value={labDate}
             onChange={(e) => setLabDate(e.target.value)}
           />
@@ -382,7 +382,7 @@ export default function LabsPage() {
               return (
                 <div key={String(f)} className="mb-3">
                   <label className="block font-semibold text-gray-900 mb-1">
-                    {labelFromField(f)} {unit ? <span className="font-normal text-gray-700">({unit})</span> : null}
+                    {labelFromField(f)} {unit ? <span className="font-normal text-gray-800">({unit})</span> : null}
                   </label>
                   <input
                     type="number"
@@ -390,9 +390,9 @@ export default function LabsPage() {
                     step="any"
                     value={v ?? ''}
                     onChange={(e) => setField(f, e.target.value)}
-                    className={`w-full p-2 rounded border ${abnormal ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
+                    className={`w-full p-2 rounded border text-gray-900 ${abnormal ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
                   />
-                  <div className="text-sm font-medium text-gray-800">
+                  <div className="text-sm font-medium text-gray-900">
                     Normal: {normalText(f)}
                   </div>
                 </div>
@@ -414,7 +414,7 @@ export default function LabsPage() {
                 <label className="block font-semibold text-gray-900 mb-1">
                   {labelFromField(f)}{' '}
                   {ranges[f] && (ranges[f] as any).unit ? (
-                    <span className="font-normal text-gray-700">({(ranges[f] as any).unit})</span>
+                    <span className="font-normal text-gray-800">({(ranges[f] as any).unit})</span>
                   ) : null}
                 </label>
                 <input
@@ -423,10 +423,10 @@ export default function LabsPage() {
                   step={isNumeric ? 'any' : undefined}
                   value={v ?? ''}
                   onChange={(e) => setField(f, e.target.value)}
-                  className={`w-full p-2 rounded border ${abnormal ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
+                  className={`w-full p-2 rounded border text-gray-900 ${abnormal ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
                 />
                 {ranges[f] ? (
-                  <div className="text-sm font-medium text-gray-800">Normal: {normalText(f)}</div>
+                  <div className="text-sm font-medium text-gray-900">Normal: {normalText(f)}</div>
                 ) : null}
               </div>
             );
@@ -443,9 +443,9 @@ export default function LabsPage() {
             <input
               readOnly
               value={lab?.hb ? (lab.hb * 3).toFixed(1) : ''}
-              className="w-full p-2 rounded border border-gray-300 bg-gray-50"
+              className="w-full p-2 rounded border border-gray-300 bg-gray-50 text-gray-900"
             />
-            <div className="text-sm font-medium text-gray-800">Normal: 40–50 %</div>
+            <div className="text-sm font-medium text-gray-900">Normal: 40–50 %</div>
           </div>
 
           {/* eGFR */}
@@ -456,9 +456,9 @@ export default function LabsPage() {
               value={
                (lab?.scr && patient ? (calculateEGFR(lab.scr!, patient.age ?? 0, patient.sex!) ?? 0).toFixed(2) : '')
               }
-              className="w-full p-2 rounded border border-gray-300 bg-gray-50"
+              className="w-full p-2 rounded border border-gray-300 bg-gray-50 text-gray-900"
             />
-            <div className="text-sm font-medium text-gray-800">Normal: ≥ 90 mL/min/1.73m²</div>
+            <div className="text-sm font-medium text-gray-900">Normal: ≥ 90 mL/min/1.73m²</div>
           </div>
         </div>
 
