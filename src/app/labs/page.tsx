@@ -1,334 +1,313 @@
-// 📁 pages/Labs.tsx
-import { useEffect, useState } from "react";
-import { supabase } from "@lib/supabaseClient";
+'use client';
 
-interface PatientInfo {
-  id: string;
-  name: string;
-  ipd: string;
-  sex: string;
-  age: number;
-}
+import React, { useEffect, useState } from 'react';
+import { createClient } from '@supabase/supabase-js';
 
-interface LabRow {
-  id?: string;
-  patient_id: string;
-  lab_date: string;
+// ===============================
+// 1. SUPABASE CLIENT
+// ===============================
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+  { auth: { persistSession: false } }
+);
 
-  hb?: number;
-  wbc?: number;
-  platelet?: number;
+// ===============================
+// 2. LAB PARAMETERS, UNITS & RANGES
+// ===============================
+type Range = { unit: string; lo?: number; hi?: number; text?: string };
 
-  scr?: number;
-  urea?: number;
-  uric_acid?: number;
+const LAB_RANGES: Record<string, Range> = {
+  // Hematology
+  hb: { unit: 'g/dL', lo: 12, hi: 17 },
+  wbc: { unit: '/mm³', lo: 4000, hi: 11000 },
+  platelet: { unit: '/mm³', lo: 150000, hi: 450000 },
 
-  na?: number;
-  k?: number;
-  cl?: number;
-  ca?: number;
-  phosphate?: number;
+  // Renal
+  scr: { unit: 'mg/dL', lo: 0.6, hi: 1.2 },
+  urea: { unit: 'mg/dL', lo: 15, hi: 45 },
+  uric_acid: { unit: 'mg/dL', lo: 3.5, hi: 7.2 },
 
-  tbil?: number;
-  dbil?: number;
-  alp?: number;
-  sgpt?: number;
-  tprotein?: number;
-  albumin?: number;
+  // Electrolytes
+  na: { unit: 'mEq/L', lo: 135, hi: 145 },
+  k: { unit: 'mEq/L', lo: 3.5, hi: 5.0 },
+  cl: { unit: 'mEq/L', lo: 98, hi: 106 },
+  ca: { unit: 'mg/dL', lo: 8.5, hi: 10.5 },
+  phosphate: { unit: 'mg/dL', lo: 2.5, hi: 4.5 },
 
-  pt?: number;
-  inr?: number;
-  aptt?: number;
-  fibrinogen?: number;
-  ddimer?: number;
+  // Liver
+  tbil: { unit: 'mg/dL', lo: 0.3, hi: 1.2 },
+  dbil: { unit: 'mg/dL', lo: 0.0, hi: 0.3 },
+  alp: { unit: 'IU/L', lo: 44, hi: 147 },
+  sgpt: { unit: 'IU/L', lo: 7, hi: 56 },
+  tprotein: { unit: 'g/dL', lo: 6.0, hi: 8.3 },
+  albumin: { unit: 'g/dL', lo: 3.5, hi: 5.0 },
 
-  abg_ph?: number;
-  pco2?: number;
-  po2?: number;
-  hco3?: number;
-  lactate?: number;
+  // Coagulation
+  pt: { unit: 'sec', lo: 11, hi: 13.5 },
+  inr: { unit: 'ratio', lo: 0.8, hi: 1.2 },
+  aptt: { unit: 'sec', lo: 25, hi: 35 },
+  fibrinogen: { unit: 'mg/dL', lo: 200, hi: 400 },
+  ddimer: { unit: 'µg/mL FEU', hi: 0.5 },
 
-  crp?: number;
-  troponin?: number;
-  cpk?: number;
-  cpkmb?: number;
+  // ABG
+  abg_ph: { unit: '', lo: 7.35, hi: 7.45 },
+  pco2: { unit: 'mmHg', lo: 35, hi: 45 },
+  po2: { unit: 'mmHg', lo: 80, hi: 100 },
+  hco3: { unit: 'mEq/L', lo: 22, hi: 26 },
+  lactate: { unit: 'mmol/L', lo: 0.5, hi: 1.6 },
 
-  rbs?: number;
+  // Inflammatory / Cardiac
+  crp: { unit: 'mg/L', hi: 6 },
+  troponin: { unit: 'ng/mL', hi: 0.04 },
+  cpk: { unit: 'IU/L', lo: 10, hi: 120 },
+  cpkmb: { unit: 'IU/L', hi: 25 },
 
-  urine_pus_cells?: string;
-  urine_rbc?: string;
-  urine_protein?: string;
-  urine_sugar?: string;
-  urine_specific_gravity?: number;
-  urine_ph?: number;
+  // Others
+  rbs: { unit: 'mg/dL', lo: 70, hi: 140 },
 
-  cag_timing?: string;
-  ptca_timing?: string;
-}
-
-// 🔸 Normal Ranges
-const ranges: Record<
-  keyof LabRow,
-  | { male?: [number, number]; female?: [number, number]; both?: [number, number] }
-> = {
-  hb: { male: [13, 17], female: [12, 15] },
-  wbc: { both: [4, 11] },
-  platelet: { both: [150, 400] },
-
-  scr: { male: [0.7, 1.3], female: [0.6, 1.1] },
-  urea: { both: [15, 45] },
-  uric_acid: { male: [3.5, 7.2], female: [2.6, 6] },
-
-  na: { both: [135, 145] },
-  k: { both: [3.5, 5] },
-  cl: { both: [98, 107] },
-  ca: { both: [8.5, 10.5] },
-  phosphate: { both: [2.5, 4.5] },
-
-  tbil: { both: [0.3, 1.2] },
-  dbil: { both: [0, 0.3] },
-  alp: { both: [44, 147] },
-  sgpt: { both: [7, 56] },
-  tprotein: { both: [6, 8.3] },
-  albumin: { both: [3.5, 5] },
-
-  pt: { both: [11, 13.5] },
-  inr: { both: [0.8, 1.2] },
-  aptt: { both: [25, 35] },
-  fibrinogen: { both: [200, 400] },
-  ddimer: { both: [0, 0.5] },
-
-  abg_ph: { both: [7.35, 7.45] },
-  pco2: { both: [35, 45] },
-  po2: { both: [80, 100] },
-  hco3: { both: [22, 26] },
-  lactate: { both: [0.5, 2.2] },
-
-  crp: { both: [0, 5] },
-  cpk: { both: [30, 200] },
-  cpkmb: { both: [0, 6] },
-  rbs: { both: [70, 140] },
-
-  urine_specific_gravity: { both: [1.005, 1.03] },
-  urine_ph: { both: [4.5, 8] },
+  // Urine
+  urine_pus_cells: { unit: '/HPF', text: '0-5' },
+  urine_rbc: { unit: '/HPF', text: '0-3' },
+  urine_protein: { unit: '', text: 'Negative' },
+  urine_sugar: { unit: '', text: 'Negative' },
+  urine_specific_gravity: { unit: '', lo: 1.005, hi: 1.030 },
+  urine_ph: { unit: '', lo: 4.5, hi: 8 },
 };
 
-export default function Labs() {
-  const [patientInfo, setPatientInfo] = useState<PatientInfo | null>(null);
-  const [lab, setLab] = useState<LabRow | null>(null);
-  const [labDate, setLabDate] = useState<string>("");
+const LAB_FIELD_GROUPS: { title: string; keys: string[] }[] = [
+  { title: 'Hematology', keys: ['hb','wbc','platelet'] },
+  { title: 'Renal', keys: ['scr','urea','uric_acid'] },
+  { title: 'Electrolytes', keys: ['na','k','cl','ca','phosphate'] },
+  { title: 'Liver', keys: ['tbil','dbil','alp','sgpt','tprotein','albumin'] },
+  { title: 'Coagulation', keys: ['pt','inr','aptt','fibrinogen','ddimer'] },
+  { title: 'ABG', keys: ['abg_ph','pco2','po2','hco3','lactate'] },
+  { title: 'Inflammatory & Cardiac', keys: ['crp','troponin','cpk','cpkmb'] },
+  { title: 'Others', keys: ['rbs'] },
+  { title: 'Urine', keys: ['urine_pus_cells','urine_rbc','urine_protein','urine_sugar','urine_specific_gravity','urine_ph'] },
+];
+
+// ===============================
+// 3. TIMEPOINT CALCULATION
+// ===============================
+function calcFlag(labDateISO: string, procISO: string | null) {
+  if (!procISO) return '—';
+  const labDate = new Date(labDateISO);
+  const proc = new Date(procISO);
+  const diffHrs = (labDate.getTime() - proc.getTime()) / 36e5;
+  if (labDate < proc) return 'Pre';
+  if (diffHrs <= 24) return '0–24 h';
+  if (diffHrs <= 48) return '24–48 h';
+  if (diffHrs <= 72) return '48–72 h';
+  return '—';
+}
+
+// ===============================
+// 4. ABNORMAL VALUE CHECK
+// ===============================
+function isAbnormal(key: string, value: any): boolean {
+  const meta = LAB_RANGES[key];
+  if (!meta || value === '' || value === null || value === undefined) return false;
+
+  if (typeof value === 'number') {
+    if (meta.lo !== undefined && value < meta.lo) return true;
+    if (meta.hi !== undefined && value > meta.hi) return true;
+  } else if (typeof value === 'string' && meta.text) {
+    const norm = meta.text.toLowerCase();
+    const val = value.toLowerCase();
+    if (norm.includes('-')) {
+      const m = norm.match(/(\d+)\s*-\s*(\d+)/);
+      if (m) {
+        const lo = Number(m[1]), hi = Number(m[2]);
+        const num = Number(val.replace(/[^0-9.]/g,''));
+        if (!isNaN(num)) return num < lo || num > hi;
+      }
+    } else if (val !== norm) return true;
+  }
+  return false;
+}
+
+// ===============================
+// 5. MAIN COMPONENT
+// ===============================
+export default function LabsPage({ params }: { params: { id: string } }) {
+  const patientId = params.id;
+  const [labs, setLabs] = useState<any[]>([]);
+  const [patient, setPatient] = useState<any>(null);
+  const [labDate, setLabDate] = useState('');
+  const [formValues, setFormValues] = useState<Record<string, any>>({});
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    fetchActivePatient();
-  }, []);
+    (async () => {
+      const { data: patientData } = await supabase
+        .from('patient_details')
+        .select('id, procedure_datetime_cag, procedure_datetime_ptca')
+        .eq('id', patientId)
+        .maybeSingle();
+      setPatient(patientData);
 
-  const fetchActivePatient = async () => {
-    const { data, error } = await supabase
-      .from("patient_details")
-      .select("*")
-      .eq("active", true)
-      .single();
-    if (error) console.error(error);
-    else setPatientInfo(data);
-  };
+      const { data: labData } = await supabase
+        .from('lab_results')
+        .select('*')
+        .eq('patient_id', patientId)
+        .order('lab_date', { ascending: true });
+      setLabs(labData || []);
+    })();
+  }, [patientId]);
 
-  const fetchLabForDate = async (date: string) => {
-    if (!patientInfo) return;
-    const { data, error } = await supabase
-      .from("lab_results_classified")
-      .select("*")
-      .eq("patient_id", patientInfo.id)
-      .eq("lab_date", date)
-      .single();
+  async function handleSave() {
+    if (!labDate) {
+      alert('Please select Lab Date');
+      return;
+    }
+
+    const payload: any = { patient_id: patientId, lab_date: labDate };
+    for (const grp of LAB_FIELD_GROUPS) {
+      for (const key of grp.keys) {
+        const val = formValues[key];
+        if (val !== '' && val !== undefined && val !== null) payload[key] = val;
+      }
+    }
+
+    setLoading(true);
+    const { data, error } = await supabase.from('lab_results').insert([payload]).select('*');
+    setLoading(false);
     if (error) {
-      setLab(null);
+      alert(error.message);
+      return;
+    }
+    setLabs(prev => [...prev, ...(data || [])]);
+    setLabDate('');
+    setFormValues({});
+  }
+
+  function handleChange(key: string, raw: string) {
+    const meta = LAB_RANGES[key];
+    let val: any = raw;
+    if (meta && meta.text) {
+      val = raw;
     } else {
-      setLab(data);
+      const n = Number(raw);
+      val = isNaN(n) ? '' : n;
     }
-  };
-
-  const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const date = e.target.value;
-    setLabDate(date);
-    fetchLabForDate(date);
-  };
-
-  const timingColor = (t: string) => {
-    if (!t) return "bg-gray-100 text-gray-700 border-gray-300";
-    if (t.includes("Pre")) return "bg-green-100 text-green-800 border-green-300";
-    if (t.includes("0–24")) return "bg-yellow-100 text-yellow-800 border-yellow-300";
-    if (t.includes("24–48")) return "bg-orange-100 text-orange-800 border-orange-300";
-    if (t.includes("48–72")) return "bg-red-100 text-red-800 border-red-300";
-    return "bg-gray-100 text-gray-800 border-gray-300";
-  };
-
-  const isAbnormal = (field: keyof LabRow, value: number | null) => {
-    if (value === null || value === undefined) return false;
-    const r = ranges[field];
-    if (!r) return false;
-    const sex = patientInfo?.sex?.toLowerCase();
-    if (r.both) return value < r.both[0] || value > r.both[1];
-    if (sex === "male" && r.male) return value < r.male[0] || value > r.male[1];
-    if (sex === "female" && r.female) return value < r.female[0] || value > r.female[1];
-    return false;
-  };
-
-  const renderInput = (label: string, field: keyof LabRow, unit = "") => {
-    const value = lab ? lab[field] as number | null : null;
-    const abnormal = isAbnormal(field, value);
-    const r = ranges[field];
-    let normalRange = "";
-    if (r) {
-      if (r.both) normalRange = `${r.both[0]}–${r.both[1]} ${unit}`;
-      else if (r.male && r.female)
-        normalRange = `M: ${r.male[0]}–${r.male[1]} ${unit} | F: ${r.female[0]}–${r.female[1]} ${unit}`;
-    }
-    return (
-      <div className="mb-2">
-        <label className="block font-semibold">
-          {label} {unit && `(${unit})`}
-        </label>
-        <input
-          type="number"
-          value={value ?? ""}
-          readOnly
-          className={`w-full p-2 border rounded ${abnormal ? "border-red-500 bg-red-50" : "border-gray-300"}`}
-        />
-        {normalRange && <p className="text-sm font-medium">Normal: {normalRange}</p>}
-      </div>
-    );
-  };
+    setFormValues(prev => ({ ...prev, [key]: val }));
+  }
 
   return (
-    <div className="max-w-3xl mx-auto p-4 space-y-4">
-      {patientInfo && (
-        <div className="bg-gray-50 p-3 rounded border">
-          <p><strong>Patient:</strong> {patientInfo.name} — <strong>IPD:</strong> {patientInfo.ipd} — <strong>Sex:</strong> {patientInfo.sex} — <strong>Age:</strong> {patientInfo.age}</p>
+    <div style={{ maxWidth: 1300, margin: '0 auto', padding: 20 }}>
+      <h1>🧪 Labs</h1>
+      <p style={{ color: '#6b7280' }}>
+        Enter lab values once. CAG and PTCA flags are auto-calculated dynamically from procedure datetimes.
+      </p>
+
+      {/* ===== FORM ===== */}
+      <div style={{ border: '2px dashed #e5e7eb', padding: 16, borderRadius: 8, marginBottom: 24 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '180px 1fr', gap: 12, marginBottom: 16 }}>
+          <div style={{ fontWeight: 600 }}>Lab Date</div>
+          <input
+            type="date"
+            value={labDate}
+            onChange={(e) => setLabDate(e.target.value)}
+            style={{ padding: 8, border: '1px solid #d1d5db', borderRadius: 8 }}
+          />
         </div>
-      )}
 
-      <div>
-        <label className="block font-semibold">Lab Date</label>
-        <input
-          type="date"
-          value={labDate}
-          onChange={handleDateChange}
-          className="p-2 border rounded w-full"
-        />
+        {LAB_FIELD_GROUPS.map((grp) => (
+          <div key={grp.title} style={{ marginBottom: 16, border: '1px solid #e5e7eb', borderRadius: 8, padding: 12 }}>
+            <h3 style={{ margin: '4px 0 12px', fontSize: '1rem' }}>{grp.title}</h3>
+            {grp.keys.map((key) => {
+              const meta = LAB_RANGES[key];
+              const val = formValues[key] ?? '';
+              const abnormal = val !== '' && isAbnormal(key, val);
+              return (
+                <div
+                  key={key}
+                  style={{ display: 'grid', gridTemplateColumns: '150px 1fr 100px 200px', gap: 12, marginBottom: 6 }}
+                >
+                  <div style={{ fontWeight: 600 }}>{key.toUpperCase()}</div>
+                  <input
+                    value={val}
+                    onChange={(e) => handleChange(key, e.target.value)}
+                    style={{
+                      padding: 8,
+                      borderRadius: 6,
+                      border: '1px solid',
+                      borderColor: abnormal ? '#ef4444' : '#d1d5db',
+                    }}
+                  />
+                  <div style={{ color: '#6b7280' }}>{meta?.unit || ''}</div>
+                  <div style={{ fontSize: 13, color: abnormal ? '#ef4444' : '#6b7280' }}>
+                    {meta?.text ? `Normal: ${meta.text}` : `Normal: ${meta?.lo ?? ''} - ${meta?.hi ?? ''}`}
+                    {abnormal && <span style={{ marginLeft: 6 }}>⚠️</span>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ))}
+
+        <button
+          onClick={handleSave}
+          disabled={loading}
+          style={{
+            padding: '10px 16px',
+            background: '#111827',
+            color: 'white',
+            borderRadius: 8,
+            border: 'none',
+            cursor: 'pointer',
+          }}
+        >
+          {loading ? 'Saving…' : 'Save'}
+        </button>
       </div>
 
-      {lab?.cag_timing && (
-        <span className={`px-2 py-1 rounded text-sm border ${timingColor(lab.cag_timing)}`}>
-          {lab.cag_timing}
-        </span>
-      )}
-      {lab?.ptca_timing && (
-        <span className={`px-2 py-1 rounded text-sm border ml-2 ${timingColor(lab.ptca_timing)}`}>
-          {lab.ptca_timing}
-        </span>
-      )}
-
-      <h2 className="text-xl font-bold mt-4">🩸 Hematology</h2>
-      {renderInput("Hemoglobin", "hb", "g/dL")}
-      {renderInput("WBC", "wbc", "×10³/µL")}
-      {renderInput("Platelets", "platelet", "×10³/µL")}
-
-      <h2 className="text-xl font-bold mt-4">🧪 Renal Function</h2>
-      {renderInput("Serum Creatinine", "scr", "mg/dL")}
-      {renderInput("Urea", "urea", "mg/dL")}
-      {renderInput("Uric Acid", "uric_acid", "mg/dL")}
-
-      <h2 className="text-xl font-bold mt-4">💧 Electrolytes</h2>
-      {renderInput("Sodium (Na⁺)", "na", "mmol/L")}
-      {renderInput("Potassium (K⁺)", "k", "mmol/L")}
-      {renderInput("Chloride (Cl⁻)", "cl", "mmol/L")}
-      {renderInput("Calcium (Ca²⁺)", "ca", "mg/dL")}
-      {renderInput("Phosphate", "phosphate", "mg/dL")}
-            <h2 className="text-xl font-bold mt-4">🫁 Liver Function</h2>
-      {renderInput("Total Bilirubin", "tbil", "mg/dL")}
-      {renderInput("Direct Bilirubin", "dbil", "mg/dL")}
-      {renderInput("ALP", "alp", "U/L")}
-      {renderInput("ALT/SGPT", "sgpt", "U/L")}
-      {renderInput("Total Protein", "tprotein", "g/dL")}
-      {renderInput("Albumin", "albumin", "g/dL")}
-
-      <h2 className="text-xl font-bold mt-4">🧬 Coagulation</h2>
-      {renderInput("PT", "pt", "sec")}
-      {renderInput("INR", "inr")}
-      {renderInput("aPTT", "aptt", "sec")}
-      {renderInput("Fibrinogen", "fibrinogen", "mg/dL")}
-      {renderInput("D-dimer", "ddimer", "mg/L")}
-
-      <h2 className="text-xl font-bold mt-4">🌡 ABG</h2>
-      {renderInput("pH", "abg_ph")}
-      {renderInput("pCO₂", "pco2", "mmHg")}
-      {renderInput("pO₂", "po2", "mmHg")}
-      {renderInput("HCO₃⁻", "hco3", "mmol/L")}
-      {renderInput("Lactate", "lactate", "mmol/L")}
-
-      <h2 className="text-xl font-bold mt-4">❤️ Cardiac & Inflammatory Markers</h2>
-      {renderInput("CRP", "crp", "mg/L")}
-      {renderInput("Troponin", "troponin", "ng/mL")}
-      {renderInput("CPK", "cpk", "U/L")}
-      {renderInput("CPK-MB", "cpkmb", "U/L")}
-      {renderInput("RBS", "rbs", "mg/dL")}
-
-      <h2 className="text-xl font-bold mt-4">🧫 Urine Analysis</h2>
-      <div className="mb-2">
-        <label className="block font-semibold">Pus Cells</label>
-        <input type="text" value={lab?.urine_pus_cells ?? ""} readOnly className="w-full p-2 border rounded border-gray-300" />
-      </div>
-      <div className="mb-2">
-        <label className="block font-semibold">RBC</label>
-        <input type="text" value={lab?.urine_rbc ?? ""} readOnly className="w-full p-2 border rounded border-gray-300" />
-      </div>
-      <div className="mb-2">
-        <label className="block font-semibold">Protein</label>
-        <input type="text" value={lab?.urine_protein ?? ""} readOnly className="w-full p-2 border rounded border-gray-300" />
-      </div>
-      <div className="mb-2">
-        <label className="block font-semibold">Sugar</label>
-        <input type="text" value={lab?.urine_sugar ?? ""} readOnly className="w-full p-2 border rounded border-gray-300" />
-      </div>
-      {renderInput("Specific Gravity", "urine_specific_gravity")}
-      {renderInput("Urine pH", "urine_ph")}
-
-      <h2 className="text-xl font-bold mt-4">🧮 Derived (Auto)</h2>
-      <div className="mb-2">
-        <label className="block font-semibold">Hematocrit (Hb × 3)</label>
-        <input
-          type="text"
-          value={lab?.hb ? (lab.hb * 3).toFixed(1) : ""}
-          readOnly
-          className={`w-full p-2 border rounded ${isAbnormal("hb", lab?.hb) ? "border-red-500 bg-red-50" : "border-gray-300"}`}
-        />
-        <p className="text-sm font-medium">Normal: 40–50 %</p>
-      </div>
-
-      <div className="mb-2">
-        <label className="block font-semibold">eGFR (CKD-EPI)</label>
-        <input
-          type="text"
-          value={lab?.scr && patientInfo
-            ? calculateEGFR(lab.scr, patientInfo.age, patientInfo.sex).toFixed(2)
-            : ""}
-          readOnly
-          className="w-full p-2 border rounded border-gray-300"
-        />
-        <p className="text-sm font-medium">Normal: ≥ 90 mL/min/1.73m²</p>
+      {/* ===== TABLE ===== */}
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr>
+              <th style={{ padding: 8, textAlign: 'left' }}>Date</th>
+              <th style={{ padding: 8, textAlign: 'left' }}>CAG Flag</th>
+              <th style={{ padding: 8, textAlign: 'left' }}>PTCA Flag</th>
+              {LAB_FIELD_GROUPS.flatMap((g) => g.keys).map((key) => (
+                <th key={key} style={{ padding: 8, textAlign: 'left' }}>{key.toUpperCase()}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {labs.map((row) => {
+              const cagFlag = calcFlag(row.lab_date, patient?.procedure_datetime_cag || null);
+              const ptcaFlag = calcFlag(row.lab_date, patient?.procedure_datetime_ptca || null);
+              return (
+                <tr key={row.id || row.lab_date}>
+                  <td style={{ padding: 8, borderTop: '1px solid #e5e7eb' }}>{row.lab_date}</td>
+                  <td style={{ padding: 8, borderTop: '1px solid #e5e7eb' }}>{cagFlag}</td>
+                  <td style={{ padding: 8, borderTop: '1px solid #e5e7eb' }}>{ptcaFlag}</td>
+                  {LAB_FIELD_GROUPS.flatMap((g) => g.keys).map((key) => {
+                    const val = row[key];
+                    const abnormal = val !== null && val !== undefined && val !== '' && isAbnormal(key, val);
+                    const unit = LAB_RANGES[key]?.unit || '';
+                    return (
+                      <td
+                        key={key}
+                        style={{
+                          padding: 8,
+                          borderTop: '1px solid #e5e7eb',
+                          color: abnormal ? '#ef4444' : undefined,
+                        }}
+                      >
+                        {val !== null && val !== undefined ? `${val}${unit ? ' ' + unit : ''}` : '—'}
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
     </div>
   );
-}
-
-// 🧠 eGFR Calculation Function
-function calculateEGFR(scr: number, age: number, sex: string) {
-  const isFemale = sex.toLowerCase() === "female";
-  const k = isFemale ? 0.7 : 0.9;
-  const a = isFemale ? -0.329 : -0.411;
-  const minRatio = Math.min(scr / k, 1);
-  const maxRatio = Math.max(scr / k, 1);
-  const sexFactor = isFemale ? 1.018 : 1;
-  const egfr = 141 * Math.pow(minRatio, a) * Math.pow(maxRatio, -1.209) * Math.pow(0.993, age) * sexFactor;
-  return egfr;
 }
