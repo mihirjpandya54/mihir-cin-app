@@ -22,6 +22,7 @@ type MedicationMasterRow = {
   id: string;
   drug_name: string;
   drug_class: string;
+  route?: string | null;               // <-- ADDED route
   is_nephrotoxic: boolean;
   is_preventive: boolean;
 };
@@ -34,6 +35,7 @@ type LocalAdminRow = {
   medication_id?: string | null; // will be filled by mapping from master
   drug_name: string;
   drug_class: string;
+  route?: string | null;         // <-- ADDED route
   is_nephrotoxic: boolean;
   is_preventive: boolean;
   dose: string;
@@ -172,16 +174,17 @@ export default function MedicationsPage() {
         .single();
       if (p) setPatient(p);
 
-      // fetch medications_master to map names -> ids
+      // fetch medications_master to map names -> ids (INCLUDE route)
       const { data: masters } = await supabase
         .from('medications_master')
-        .select('id, drug_name, drug_class, is_nephrotoxic, is_preventive');
+        .select('id, drug_name, drug_class, route, is_nephrotoxic, is_preventive');
       const map: Record<string, MedicationMasterRow | undefined> = {};
       (masters || []).forEach((m: any) => {
         map[m.drug_name] = {
           id: m.id,
           drug_name: m.drug_name,
           drug_class: m.drug_class,
+          route: m.route ?? null, // <-- map route
           is_nephrotoxic: m.is_nephrotoxic,
           is_preventive: m.is_preventive
         };
@@ -196,18 +199,16 @@ export default function MedicationsPage() {
           .eq('patient_id', active.patient_id);
         const parsed: LocalAdminRow[] = (admins || []).map((a: any) => {
           const dayChecks = [1,2,3,4,5,6,7].map(i => !!a[`day${i}`]);
+          const foundMaster = Object.values(map).find(mm => mm?.id === a.medication_id);
           return {
             _clientId: `db-${a.id}`,
             id: a.id,
             medication_id: a.medication_id,
-            drug_name: (() => {
-              // find name in masterMap by id (reverse lookup)
-              const found = Object.values(map).find(mm => mm?.id === a.medication_id);
-              return found?.drug_name || 'Unknown';
-            })(),
-            drug_class: a.drug_class || '',
-            is_nephrotoxic: a.is_nephrotoxic ?? false,
-            is_preventive: a.is_preventive ?? false,
+            drug_name: foundMaster?.drug_name || (a.drug_name ?? 'Unknown'),
+            drug_class: a.drug_class ?? foundMaster?.drug_class ?? '',
+            route: foundMaster?.route ?? a.route ?? null, // <-- include route mapping
+            is_nephrotoxic: a.is_nephrotoxic ?? foundMaster?.is_nephrotoxic ?? false,
+            is_preventive: a.is_preventive ?? foundMaster?.is_preventive ?? false,
             dose: a.dose ?? '',
             frequency: a.frequency ?? '',
             dayChecks,
@@ -269,9 +270,10 @@ export default function MedicationsPage() {
     const newRow: LocalAdminRow = {
       _clientId: `c-${crypto.randomUUID()}`,
       id: null,
-      medication_id: masterMap[drugName]?.id ?? null,
+      medication_id: masterMap[drugName]?.id ?? null,    // ensure medication_id attached
       drug_name: drugName,
       drug_class: drugClass,
+      route: masterMap[drugName]?.route ?? null,         // ensure route attached
       is_nephrotoxic: isNeph,
       is_preventive: isPrev,
       dose: '',
@@ -326,6 +328,7 @@ export default function MedicationsPage() {
         medication_id: masterMap[drugName]?.id ?? null,
         drug_name: drugName,
         drug_class: drugClass,
+        route: masterMap[drugName]?.route ?? null,
         is_nephrotoxic: isNeph,
         is_preventive: isPrev,
         dose: '',
@@ -346,6 +349,21 @@ export default function MedicationsPage() {
     if (!patient) return;
     setSaving(true);
 
+    // VALIDATION: ensure every row has a medication_id (either stored or available in masterMap)
+    const missingMasters: string[] = [];
+    for (const r of localRows) {
+      const mappedId = r.medication_id ?? masterMap[r.drug_name]?.id ?? null;
+      if (!mappedId) {
+        if (!missingMasters.includes(r.drug_name)) missingMasters.push(r.drug_name);
+      }
+    }
+    if (missingMasters.length > 0) {
+      setSaving(false);
+      alert(`Cannot save — master IDs missing for: ${missingMasters.join(', ')}\n\nFix medications_master entries or correct spelling in DRUG_LIST.`);
+      console.error('Missing masterMap entries for:', missingMasters);
+      return;
+    }
+
     // Build upsert payload: map each local row to medication_administration fields
     // day1..day7 booleans come from dayChecks array
     const payload = localRows.map(r => {
@@ -359,6 +377,8 @@ export default function MedicationsPage() {
         drug_class: r.drug_class,
         is_nephrotoxic: r.is_nephrotoxic,
         is_preventive: r.is_preventive,
+        // NOTE: route is kept in frontend rows but not sent to DB to avoid schema mismatch;
+        // if you want to persist route, ensure a route column exists and add it here.
       };
       for (let i = 0; i < 7; i++) {
         rowPayload[`day${i+1}`] = !!r.dayChecks[i];
@@ -369,7 +389,6 @@ export default function MedicationsPage() {
     });
 
     // Upsert. Note: medication_administration has id primary key (uuid) and medication_id fk.
-    // We rely on DB trigger/gen_random_uuid or we pass id=null to let DB generate; Supabase upsert requires unique constraint.
     try {
       // Use insert for new rows and update for existing rows to avoid primary key conflict complexity:
       // 1) Update existing rows
@@ -386,22 +405,23 @@ export default function MedicationsPage() {
       }
       // After save, reload local rows from DB to sync ids & saved flags
       const { data: admins } = await supabase.from('medication_administration').select('*').eq('patient_id', patient.id);
-      const newLocal = (admins || []).map((a: any) => ({
-        _clientId: `db-${a.id}`,
-        id: a.id,
-        medication_id: a.medication_id,
-        drug_name: (() => {
-          const mm = Object.values(masterMap).find(x => x?.id === a.medication_id);
-          return mm?.drug_name ?? 'Unknown';
-        })(),
-        drug_class: a.drug_class ?? '',
-        is_nephrotoxic: a.is_nephrotoxic ?? false,
-        is_preventive: a.is_preventive ?? false,
-        dose: a.dose ?? '',
-        frequency: a.frequency ?? '',
-        dayChecks: [1,2,3,4,5,6,7].map(i => !!a[`day${i}`]),
-        saved: true
-      })) as LocalAdminRow[];
+      const newLocal = (admins || []).map((a: any) => {
+        const found = Object.values(masterMap).find(x => x?.id === a.medication_id);
+        return {
+          _clientId: `db-${a.id}`,
+          id: a.id,
+          medication_id: a.medication_id,
+          drug_name: found?.drug_name ?? (a.drug_name ?? 'Unknown'),
+          drug_class: a.drug_class ?? found?.drug_class ?? '',
+          route: found?.route ?? a.route ?? null, // keep route in synced rows
+          is_nephrotoxic: a.is_nephrotoxic ?? found?.is_nephrotoxic ?? false,
+          is_preventive: a.is_preventive ?? found?.is_preventive ?? false,
+          dose: a.dose ?? '',
+          frequency: a.frequency ?? '',
+          dayChecks: [1,2,3,4,5,6,7].map(i => !!a[`day${i}`]),
+          saved: true
+        } as LocalAdminRow;
+      }) as LocalAdminRow[];
       setLocalRows(newLocal);
       // reload remote summary
       const { data: summary } = await supabase.from('medication_summary_per_patient').select('*').eq('patient_id', patient.id).maybeSingle();
@@ -479,6 +499,7 @@ export default function MedicationsPage() {
           <thead className="bg-gray-300 sticky top-0">
             <tr>
               <th className="p-2 text-left text-gray-900">Drug</th>
+              <th className="p-2 text-gray-900">Route</th> {/* <-- ADDED Route header */}
               <th className="p-2 text-gray-900">Dose</th>
               <th className="p-2 text-gray-900">Freq</th>
               {dateOptions.map(d => <th key={d} className="p-2 whitespace-nowrap text-gray-900 font-semibold">{d}</th>)}
@@ -489,7 +510,8 @@ export default function MedicationsPage() {
             {filteredGroups.map(group => (
               <React.Fragment key={group.class}>
                 <tr className="bg-gray-200 font-bold text-gray-900">
-                  <td colSpan={4 + dateOptions.length} className="p-2">{group.class}</td>
+                  {/* UPDATED colSpan to account for Route column (now 5 fixed cols + date columns) */}
+                  <td colSpan={5 + dateOptions.length} className="p-2">{group.class}</td>
                 </tr>
 
                 {group.drugs.map(drugName => {
@@ -507,6 +529,7 @@ export default function MedicationsPage() {
                           {drugName}
                           {!sampleMaster && <span className="ml-2 text-xs text-red-700"> (master not found)</span>}
                         </td>
+                        <td className="p-1 text-gray-900">{sampleMaster?.route ?? '-'}</td> {/* <-- show route */}
                         <td className="p-1 text-gray-900">-</td>
                         <td className="p-1 text-gray-900">-</td>
                         {dateOptions.map((d, i) => {
@@ -536,6 +559,7 @@ export default function MedicationsPage() {
                         {r.drug_name}
                         {!r.medication_id && <span className="ml-2 text-xs text-red-700">(no master id)</span>}
                       </td>
+                      <td className="p-1 text-gray-900">{r.route ?? '-'}</td> {/* <-- show route */}
                       <td className="p-1">
                         <input
                           className="border p-1 rounded w-full text-sm text-gray-900 border-gray-400"
