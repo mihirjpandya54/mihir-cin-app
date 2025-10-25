@@ -180,7 +180,7 @@ export default function MedicationsPage() {
         .select('id, drug_name, drug_class, route, is_nephrotoxic, is_preventive');
       const map: Record<string, MedicationMasterRow | undefined> = {};
       (masters || []).forEach((m: any) => {
-        map[m.drug_name] = {
+        map[m.drug_name.trim()] = {
           id: m.id,
           drug_name: m.drug_name,
           drug_class: m.drug_class,
@@ -520,7 +520,7 @@ export default function MedicationsPage() {
                   // if none exist, show one blank "virtual" row that uses quick toggles
                   if (rowsForDrug.length === 0) {
                     // quick UI row (client-only until saved)
-                    const sampleMaster = (masterMap[drugName]);
+                    const sampleMaster = masterMap[drugName.trim()];
                     const isNeph = sampleMaster?.is_nephrotoxic ?? group.is_nephrotoxic;
                     const isPrev = sampleMaster?.is_preventive ?? group.is_preventive;
                     return (
