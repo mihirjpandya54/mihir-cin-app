@@ -133,12 +133,12 @@ function classifyTimingLabel(dateISO: string, procISO: string | null, tag: 'CAG'
   return null;
 }
 const chipClass = (label: string) => {
-  if (!label) return 'bg-gray-100 text-gray-800 border-gray-300';
-  if (label.startsWith('Pre')) return 'bg-green-100 text-green-800 border-green-300';
-  if (label.startsWith('0–24')) return 'bg-yellow-100 text-yellow-800 border-yellow-300';
-  if (label.startsWith('48')) return 'bg-orange-100 text-orange-800 border-orange-300';
-  if (label.startsWith('72')) return 'bg-red-100 text-red-800 border-red-300';
-  return 'bg-gray-100 text-gray-800 border-gray-300';
+  if (!label) return 'bg-gray-200 text-gray-900 border-gray-400';
+  if (label.startsWith('Pre')) return 'bg-green-200 text-green-900 border-green-600';
+  if (label.startsWith('0–24')) return 'bg-yellow-200 text-yellow-900 border-yellow-600';
+  if (label.startsWith('48')) return 'bg-orange-200 text-orange-900 border-orange-600';
+  if (label.startsWith('72')) return 'bg-red-200 text-red-900 border-red-600';
+  return 'bg-gray-200 text-gray-900 border-gray-400';
 };
 
 // map day index (0..6) to db field name
@@ -468,27 +468,27 @@ export default function MedicationsPage() {
         <input
           type="text"
           placeholder="🔍 Search drug or class..."
-          className="w-full p-2 border rounded"
+          className="w-full p-2 border rounded text-gray-900 border-gray-400"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
       </div>
 
       <div className="overflow-auto w-full max-w-6xl bg-white rounded shadow">
-        <table className="w-full text-sm">
-          <thead className="bg-gray-200 sticky top-0">
+        <table className="w-full text-sm text-gray-900">
+          <thead className="bg-gray-300 sticky top-0">
             <tr>
-              <th className="p-2 text-left">Drug</th>
-              <th className="p-2">Dose</th>
-              <th className="p-2">Freq</th>
-              {dateOptions.map(d => <th key={d} className="p-2 whitespace-nowrap">{d}</th>)}
-              <th className="p-2">Actions</th>
+              <th className="p-2 text-left text-gray-900">Drug</th>
+              <th className="p-2 text-gray-900">Dose</th>
+              <th className="p-2 text-gray-900">Freq</th>
+              {dateOptions.map(d => <th key={d} className="p-2 whitespace-nowrap text-gray-900 font-semibold">{d}</th>)}
+              <th className="p-2 text-gray-900">Actions</th>
             </tr>
           </thead>
           <tbody>
             {filteredGroups.map(group => (
               <React.Fragment key={group.class}>
-                <tr className="bg-gray-100 font-semibold">
+                <tr className="bg-gray-200 font-bold text-gray-900">
                   <td colSpan={4 + dateOptions.length} className="p-2">{group.class}</td>
                 </tr>
 
@@ -503,9 +503,12 @@ export default function MedicationsPage() {
                     const isPrev = sampleMaster?.is_preventive ?? group.is_preventive;
                     return (
                       <tr key={drugName} className={`${isNeph ? 'bg-red-50' : isPrev ? 'bg-green-50' : ''}`}>
-                        <td className="p-2">{drugName}{!sampleMaster && <span className="ml-2 text-xs text-red-600"> (master not found)</span>}</td>
-                        <td className="p-1">-</td>
-                        <td className="p-1">-</td>
+                        <td className="p-2 text-gray-900 font-medium">
+                          {drugName}
+                          {!sampleMaster && <span className="ml-2 text-xs text-red-700"> (master not found)</span>}
+                        </td>
+                        <td className="p-1 text-gray-900">-</td>
+                        <td className="p-1 text-gray-900">-</td>
                         {dateOptions.map((d, i) => {
                           const cagLabel = classifyTimingLabel(d, patient?.procedure_datetime_cag ?? null, 'CAG');
                           const ptcaLabel = classifyTimingLabel(d, patient?.procedure_datetime_ptca ?? null, 'PTCA');
@@ -513,8 +516,8 @@ export default function MedicationsPage() {
                             <td key={d} className="p-1 text-center">
                               <input type="checkbox" onChange={() => handleMasterRowToggle(drugName, group.class, isNeph, isPrev, i)} />
                               <div className="mt-1 text-xs flex flex-col gap-1 items-center">
-                                {cagLabel && <span className={`px-1 rounded text-xs ${chipClass(cagLabel)}`}>{cagLabel}</span>}
-                                {ptcaLabel && <span className={`px-1 rounded text-xs ${chipClass(ptcaLabel)}`}>{ptcaLabel}</span>}
+                                {cagLabel && <span className={`px-1 rounded text-xs font-semibold ${chipClass(cagLabel)}`}>{cagLabel}</span>}
+                                {ptcaLabel && <span className={`px-1 rounded text-xs font-semibold ${chipClass(ptcaLabel)}`}>{ptcaLabel}</span>}
                               </div>
                             </td>
                           );
@@ -529,12 +532,23 @@ export default function MedicationsPage() {
                   // render each saved or unsaved row for this drug
                   return rowsForDrug.map(r => (
                     <tr key={r._clientId} className={`${r.is_nephrotoxic ? 'bg-red-50' : r.is_preventive ? 'bg-green-50' : ''}`}>
-                      <td className="p-2">{r.drug_name}{!r.medication_id && <span className="ml-2 text-xs text-red-600">(no master id)</span>}</td>
-                      <td className="p-1">
-                        <input className="border p-1 rounded w-full text-sm" value={r.dose} onChange={(e) => setDoseForRow(r._clientId, e.target.value)} />
+                      <td className="p-2 text-gray-900 font-medium">
+                        {r.drug_name}
+                        {!r.medication_id && <span className="ml-2 text-xs text-red-700">(no master id)</span>}
                       </td>
                       <td className="p-1">
-                        <input className="border p-1 rounded w-full text-sm" value={r.frequency} onChange={(e) => setFreqForRow(r._clientId, e.target.value)} />
+                        <input
+                          className="border p-1 rounded w-full text-sm text-gray-900 border-gray-400"
+                          value={r.dose}
+                          onChange={(e) => setDoseForRow(r._clientId, e.target.value)}
+                        />
+                      </td>
+                      <td className="p-1">
+                        <input
+                          className="border p-1 rounded w-full text-sm text-gray-900 border-gray-400"
+                          value={r.frequency}
+                          onChange={(e) => setFreqForRow(r._clientId, e.target.value)}
+                        />
                       </td>
 
                       {dateOptions.map((d, i) => {
@@ -544,8 +558,8 @@ export default function MedicationsPage() {
                           <td key={d} className="p-1 text-center align-top">
                             <input type="checkbox" checked={!!r.dayChecks[i]} onChange={() => toggleCheckboxForRow(r._clientId, i)} />
                             <div className="mt-1 text-xs flex flex-col gap-1 items-center">
-                              {cagLabel && <span className={`px-1 rounded text-xs ${chipClass(cagLabel)}`}>{cagLabel}</span>}
-                              {ptcaLabel && <span className={`px-1 rounded text-xs ${chipClass(ptcaLabel)}`}>{ptcaLabel}</span>}
+                              {cagLabel && <span className={`px-1 rounded text-xs font-semibold ${chipClass(cagLabel)}`}>{cagLabel}</span>}
+                              {ptcaLabel && <span className={`px-1 rounded text-xs font-semibold ${chipClass(ptcaLabel)}`}>{ptcaLabel}</span>}
                             </div>
                           </td>
                         );
@@ -575,7 +589,7 @@ export default function MedicationsPage() {
       {/* Summary: show localSummary first (live), then remoteSummary if present */}
       <div className="bg-white w-full max-w-6xl mt-6 rounded shadow p-4">
         <h2 className="text-2xl font-bold mb-4 text-gray-900">📊 Summary (Nephrotoxic / Preventive)</h2>
-        <table className="w-full border text-center">
+        <table className="w-full border text-center text-gray-900">
           <thead><tr className="bg-gray-200"><th className="border p-2"></th><th className="border p-2">Nephrotoxic</th><th className="border p-2">Preventive</th></tr></thead>
           <tbody>
             <tr><td className="border p-2">Pre CAG</td><td className="border p-2">{(localSummary.pre_cag || 0) > 0 ? '✅' : '❌'}</td><td className="border p-2">{(localSummary.prev_pre_cag || 0) > 0 ? '✅' : '❌'}</td></tr>
@@ -589,7 +603,7 @@ export default function MedicationsPage() {
           </tbody>
         </table>
         {remoteSummary && (
-          <div className="text-xs text-gray-500 mt-2">DB summary (latest): Nephrotoxic pre-CAG count = {remoteSummary.nephrotoxic_pre_cag_count ?? 0}</div>
+          <div className="text-xs text-gray-600 mt-2">DB summary (latest): Nephrotoxic pre-CAG count = {remoteSummary.nephrotoxic_pre_cag_count ?? 0}</div>
         )}
       </div>
     </div>
