@@ -102,7 +102,7 @@ const DRUG_LIST = [
     class: "Others (Nephrotoxic)",
     is_nephrotoxic: true,
     is_preventive: false,
-    drugs: ["Lithium","Atorvastatin","Rosuvastatin","Daptomycin"]
+    drugs: ["Lithium","Daptomycin"]
   },
   {
     class: "Preventive Measures",
