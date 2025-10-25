@@ -22,38 +22,46 @@ type MedicationMasterRow = {
   id: string;
   drug_name: string;
   drug_class: string;
-  route?: string | null;               // <-- ADDED route
+  route?: string | null;
   is_nephrotoxic: boolean;
   is_preventive: boolean;
 };
 
 type LocalAdminRow = {
-  // client-side only id (for duplicates/unsaved rows)
   _clientId: string;
-  // db id if exists (medication_administration.id)
   id?: string | null;
-  medication_id?: string | null; // will be filled by mapping from master
+  medication_id?: string | null;
   drug_name: string;
   drug_class: string;
-  route?: string | null;         // <-- ADDED route
+  route?: string | null;
   is_nephrotoxic: boolean;
   is_preventive: boolean;
   dose: string;
   frequency: string;
-  // booleans for 7 day columns
-  dayChecks: boolean[]; // length 7
-  saved?: boolean; // indicates row already persisted
+  dayChecks: boolean[];
+  saved?: boolean;
 };
 
-// ---------- DRUG LIST (hardcoded UI order & grouping) exactly as your SQL seed ----------
+// ---------- DRUG LIST (with IDs) ----------
 const DRUG_LIST = [
   {
     class: "NSAIDs",
     is_nephrotoxic: true,
     is_preventive: false,
     drugs: [
-      "Diclofenac","Ibuprofen","Naproxen","Indomethacin","Ketorolac","Piroxicam",
-      "Etoricoxib","Celecoxib","Aceclofenac","Meloxicam","Lornoxicam","Nabumetone","Parecoxib"
+      { id: "655ab1e2-7e18-44cc-8737-3b45b40a7761", name: "Diclofenac" },
+      { id: "712de446-e683-48ad-9413-052fa5dbf981", name: "Ibuprofen" },
+      { id: "e22ec8b8-433d-46f4-92eb-b3b8fff5a42d", name: "Naproxen" },
+      { id: "c6d22bc3-9f19-4ccd-bf51-391b8deed093", name: "Indomethacin" },
+      { id: "cdc26381-c0b2-4e6c-bc00-b9a5a488090c", name: "Ketorolac" },
+      { id: "941d0ebb-b2ec-4d56-b061-713b3abd756c", name: "Piroxicam" },
+      { id: "53c5a314-58b4-44ba-8ee5-97aa1978ef48", name: "Etoricoxib" },
+      { id: "1fe021bc-42d4-46c1-9d2d-cc6c07e38a20", name: "Celecoxib" },
+      { id: "2398bf60-ee58-44c0-b9c2-73cab007a3d5", name: "Aceclofenac" },
+      { id: "deea8845-d923-4839-9eae-22730ec36439", name: "Meloxicam" },
+      { id: "2029d14f-e229-4c6b-add8-3f8a90ee7d1a", name: "Lornoxicam" },
+      { id: "1934b378-2ed4-4eec-a256-0b1ab8c39b11", name: "Nabumetone" },
+      { id: "70f2bf2d-bdb0-46d3-9946-3be1f95fe3ff", name: "Parecoxib" }
     ]
   },
   {
@@ -61,9 +69,19 @@ const DRUG_LIST = [
     is_nephrotoxic: true,
     is_preventive: false,
     drugs: [
-      "Captopril","Enalapril","Lisinopril","Ramipril","Perindopril","Losartan",
-      "Valsartan","Telmisartan","Olmesartan","Candesartan","Irbesartan",
-      "Sacubitril/Valsartan","Aliskiren"
+      { id: "bd299ccc-1ff5-464c-97bc-a29ba5a2e9ff", name: "Captopril" },
+      { id: "ed19204a-96cc-49f1-ad1a-260e142c8b03", name: "Enalapril" },
+      { id: "a418f0b0-42aa-4abf-9d09-9d0348a5e53d", name: "Lisinopril" },
+      { id: "94f2f3a8-f4d3-47e9-a9de-f58851532d56", name: "Ramipril" },
+      { id: "3cc9197a-a177-4577-a218-f8017d1517d4", name: "Perindopril" },
+      { id: "7663a013-0fca-427a-ba96-6c8befe42395", name: "Losartan" },
+      { id: "0d69a66d-a3cd-4e04-b6c5-eb98c8c2544a", name: "Valsartan" },
+      { id: "cead2283-3d6f-4c04-9d0c-a0a7b9a6655a", name: "Telmisartan" },
+      { id: "b53d62a3-9440-4620-b673-46ab10017c5d", name: "Olmesartan" },
+      { id: "4bb1af0d-8b8a-4444-9aef-95d29a373c76", name: "Candesartan" },
+      { id: "b580acea-d869-453b-a565-9f5c2d01fa08", name: "Irbesartan" },
+      { id: "b9250cde-8da0-422b-95b2-ab375d483edb", name: "Sacubitril/Valsartan" },
+      { id: "99b1ea57-49b0-4b00-86c3-ea6cdeeac224", name: "Aliskiren" }
     ]
   },
   {
@@ -71,24 +89,46 @@ const DRUG_LIST = [
     is_nephrotoxic: true,
     is_preventive: false,
     drugs: [
-      "Furosemide","Torsemide","Bumetanide","Hydrochlorothiazide",
-      "Chlorthalidone","Indapamide","Metolazone"
+      { id: "1684289a-190d-47e2-882e-fd8dd2e0a7f0", name: "Furosemide" },
+      { id: "25d3353b-161d-4956-9a03-bc1b5b1a251f", name: "Torsemide" },
+      { id: "e6ca859c-54c0-4162-a7ca-af47b8d19200", name: "Bumetanide" },
+      { id: "62def3f5-130a-4074-8552-a05500651964", name: "Hydrochlorothiazide" },
+      { id: "8507cc90-79ae-4703-b7e7-f7f841a72c8a", name: "Chlorthalidone" },
+      { id: "971d4e06-f3ce-4b64-a652-c3e2ab7d71ff", name: "Indapamide" },
+      { id: "16b1f0c8-50ba-45ba-93fe-1d632395e25c", name: "Metolazone" }
     ]
   },
   {
     class: "Aminoglycosides",
     is_nephrotoxic: true,
     is_preventive: false,
-    drugs: ["Gentamicin","Amikacin","Tobramycin","Netilmicin","Neomycin"]
+    drugs: [
+      { id: "b86c43ef-e62a-431c-a728-6d7770578f08", name: "Gentamicin" },
+      { id: "f25de259-223f-4202-bcdb-930e05fad3d2", name: "Amikacin" },
+      { id: "6f386301-4b47-41e1-ac18-33d6e414cc13", name: "Tobramycin" },
+      { id: "4a78062a-255f-45dd-a6fe-1566c01067ea", name: "Netilmicin" },
+      { id: "13340930-03f6-47dc-b447-ff19a9ac1f49", name: "Neomycin" }
+    ]
   },
   {
     class: "Nephrotoxic Antibiotics/Others",
     is_nephrotoxic: true,
     is_preventive: false,
     drugs: [
-      "Vancomycin","Piperacillin-Tazobactam","Acyclovir","Ganciclovir","Foscarnet","Cidofovir",
-      "Tenofovir","Adefovir","Trimethoprim-Sulfamethoxazole","Methicillin","Nafcillin","Oxacillin",
-      "Cefazolin","Amphotericin B"
+      { id: "6b8ed311-cc38-4b0e-9717-00fb2b26525b", name: "Vancomycin" },
+      { id: "97133eda-5c71-450e-9282-fb97f34f7ef9", name: "Piperacillin-Tazobactam" },
+      { id: "376f2bdf-9e55-4fe0-b88f-7bca9003a73a", name: "Acyclovir" },
+      { id: "ff87ebba-5bdf-42bf-84ba-63dc34e40794", name: "Ganciclovir" },
+      { id: "b10210a2-bafd-4369-b11b-5e61effe35ef", name: "Foscarnet" },
+      { id: "4fb80206-a684-467f-9269-5505b95a4947", name: "Cidofovir" },
+      { id: "04736a29-8b59-439e-91f7-0a7cca405849", name: "Tenofovir" },
+      { id: "c0d8f279-51f9-4160-9648-880912fc9f60", name: "Adefovir" },
+      { id: "5b186597-407c-4e46-ac8f-9bbd337b6f20", name: "Trimethoprim-Sulfamethoxazole" },
+      { id: "749f7c46-f8e5-4645-ab94-3c03dc5ff26d", name: "Methicillin" },
+      { id: "3d22deab-0af7-42d1-baeb-062b727b6fb6", name: "Nafcillin" },
+      { id: "7e33221b-a594-4e36-a8cc-d366b4f1e72c", name: "Oxacillin" },
+      { id: "f9e58507-814f-4f84-95ec-e99481e198a7", name: "Cefazolin" },
+      { id: "3575095f-129c-4b20-88e0-0af765b61f2e", name: "Amphotericin B" }
     ]
   },
   {
@@ -96,25 +136,45 @@ const DRUG_LIST = [
     is_nephrotoxic: true,
     is_preventive: false,
     drugs: [
-      "Cisplatin","Carboplatin","Oxaliplatin","Ifosfamide","Methotrexate",
-      "Cyclophosphamide","Mitomycin C","Cyclosporine","Tacrolimus"
+      { id: "22a6685f-d24d-437f-8531-dc5da9d3bb01", name: "Cisplatin" },
+      { id: "19e339d2-eee8-4b57-bb94-1937296d4648", name: "Carboplatin" },
+      { id: "db8f85c8-cf95-4608-821c-7fca9f73e5db", name: "Oxaliplatin" },
+      { id: "8577f0de-43c3-42a9-a03e-770a41d3de35", name: "Ifosfamide" },
+      { id: "a4a585f6-0afd-4325-8c5a-46b691267fef", name: "Methotrexate" },
+      { id: "fc0bcc10-9323-421b-95af-e7cef6204d25", name: "Cyclophosphamide" },
+      { id: "ad82e432-996b-49bf-9256-89d80b648a53", name: "Mitomycin C" },
+      { id: "df9a2649-4eab-4161-9cf8-d60549242136", name: "Cyclosporine" },
+      { id: "8496fed4-f82b-41c9-9058-0d9ac57f76a9", name: "Tacrolimus" }
     ]
   },
   {
     class: "Others (Nephrotoxic)",
     is_nephrotoxic: true,
     is_preventive: false,
-    drugs: ["Lithium","Daptomycin"]
+    drugs: [
+      { id: "bac0f7ec-1074-4b44-8f12-e149699efe4f", name: "Lithium" },
+      { id: "3a0e23ea-ec31-4b3d-a6ed-eeb0b9a8c8c2", name: "Daptomycin" }
+    ]
   },
   {
     class: "Preventive Measures",
     is_nephrotoxic: false,
     is_preventive: true,
     drugs: [
-      "0.9% Normal Saline","Sodium Bicarbonate","N-Acetylcysteine","Ascorbic Acid",
-      "Atorvastatin","Rosuvastatin","Hold NSAIDs","Hold ACEI/ARB","Hold Diuretics",
-      "Hold Metformin","Iso-osmolar contrast use","Minimize contrast volume",
-      "Avoid repeat contrast within 48-72h","Radial access"
+      { id: "3d36e3a8-7c1b-4505-b212-cb3664f11665", name: "0.9% Normal Saline" },
+      { id: "fc0623f9-7257-46f2-b70b-e9578a6d3dc8", name: "Sodium Bicarbonate" },
+      { id: "203002e1-a189-44eb-8558-3ed37befc7d3", name: "N-Acetylcysteine" },
+      { id: "e50323e4-fac4-47d3-a960-aa0f306ca1b7", name: "Ascorbic Acid" },
+      { id: "f95608b0-13da-455e-aae0-44133195e4bb", name: "Atorvastatin" },
+      { id: "cdd3e282-9bd0-41e7-9294-20068eb64f15", name: "Rosuvastatin" },
+      { id: "314b77fa-c025-467b-937b-6f78ea175924", name: "Hold NSAIDs" },
+      { id: "77febc9e-17b7-4fe8-a374-7285e2634633", name: "Hold ACEI/ARB" },
+      { id: "5c0b1449-a791-4d31-b856-45e125a5ebac", name: "Hold Diuretics" },
+      { id: "ad2d050b-c6f0-4b95-b393-1caca2b4350f", name: "Hold Metformin" },
+      { id: "c5dc1e6d-dac8-4c27-80c1-6d16d2ea9f65", name: "Iso-osmolar contrast use" },
+      { id: "61e31a21-bae6-4f9d-9dba-e2c63310c33a", name: "Minimize contrast volume" },
+      { id: "3bdb9291-3a26-43f3-a6ad-726d72b352f8", name: "Avoid repeat contrast within 48-72h" },
+      { id: "3843b352-66eb-4927-a203-85d59d12568f", name: "Radial access" }
     ]
   }
 ];
@@ -134,6 +194,7 @@ function classifyTimingLabel(dateISO: string, procISO: string | null, tag: 'CAG'
   if (diff === 2) return `72 ${tag}`;
   return null;
 }
+
 const chipClass = (label: string) => {
   if (!label) return 'bg-gray-200 text-gray-900 border-gray-400';
   if (label.startsWith('Pre')) return 'bg-green-200 text-green-900 border-green-600';
@@ -143,7 +204,6 @@ const chipClass = (label: string) => {
   return 'bg-gray-200 text-gray-900 border-gray-400';
 };
 
-// map day index (0..6) to db field name
 const dayFieldName = (i: number) => `day${i + 1}`;
 
 // ---------- Page Component ----------
@@ -155,16 +215,11 @@ export default function MedicationsPage() {
   const [saving, setSaving] = useState(false);
   const [remoteSummary, setRemoteSummary] = useState<any | null>(null);
 
-  // Load active patient and master meds mapping
+  // Load active patient + master mapping
   useEffect(() => {
     (async () => {
-      // active patient pattern from your labs file
       const userId = '00000000-0000-0000-0000-000000000001';
-      const { data: active } = await supabase
-        .from('active_patient')
-        .select('patient_id')
-        .eq('user_id', userId)
-        .maybeSingle();
+      const { data: active } = await supabase.from('active_patient').select('patient_id').eq('user_id', userId).maybeSingle();
       if (!active?.patient_id) return;
 
       const { data: p } = await supabase
@@ -174,7 +229,6 @@ export default function MedicationsPage() {
         .single();
       if (p) setPatient(p);
 
-      // fetch medications_master to map names -> ids (INCLUDE route)
       const { data: masters } = await supabase
         .from('medications_master')
         .select('id, drug_name, drug_class, route, is_nephrotoxic, is_preventive');
@@ -184,14 +238,13 @@ export default function MedicationsPage() {
           id: m.id,
           drug_name: m.drug_name,
           drug_class: m.drug_class,
-          route: m.route ?? null, // <-- map route
+          route: m.route ?? null,
           is_nephrotoxic: m.is_nephrotoxic,
           is_preventive: m.is_preventive
         };
       });
       setMasterMap(map);
 
-      // load existing administration rows for this patient (map them to localRows)
       if (active?.patient_id) {
         const { data: admins } = await supabase
           .from('medication_administration')
@@ -206,7 +259,7 @@ export default function MedicationsPage() {
             medication_id: a.medication_id,
             drug_name: foundMaster?.drug_name || (a.drug_name ?? 'Unknown'),
             drug_class: a.drug_class ?? foundMaster?.drug_class ?? '',
-            route: foundMaster?.route ?? a.route ?? null, // <-- include route mapping
+            route: foundMaster?.route ?? a.route ?? null,
             is_nephrotoxic: a.is_nephrotoxic ?? foundMaster?.is_nephrotoxic ?? false,
             is_preventive: a.is_preventive ?? foundMaster?.is_preventive ?? false,
             dose: a.dose ?? '',
@@ -216,7 +269,7 @@ export default function MedicationsPage() {
           };
         });
         setLocalRows(parsed);
-        // load remote summary for this patient
+
         const { data: s } = await supabase
           .from('medication_summary_per_patient')
           .select('*')
@@ -227,14 +280,13 @@ export default function MedicationsPage() {
     })();
   }, []);
 
-  // Date window: 7 columns relative to earliest procedure date (or admission fallback)
+  // Date window
   const dateOptions = useMemo(() => {
     if (!patient) return [];
     const cag = patient.procedure_datetime_cag ? new Date(patient.procedure_datetime_cag) : null;
     const ptca = patient.procedure_datetime_ptca ? new Date(patient.procedure_datetime_ptca) : null;
     const earliest = cag && ptca ? (cag < ptca ? cag : ptca) : cag || ptca || new Date();
     const arr: string[] = [];
-    // include one day before (index 0) then next 6 days -> total 7
     for (let i = -1; i <= 5; i++) {
       const d = new Date(earliest);
       d.setDate(earliest.getDate() + i);
@@ -243,19 +295,18 @@ export default function MedicationsPage() {
     return arr;
   }, [patient]);
 
-  // Filtered group view for UI according to search
+  // Filtered group view
   const filteredGroups = useMemo(() => {
     if (!search.trim()) return DRUG_LIST;
     const q = search.trim().toLowerCase();
     return DRUG_LIST.map(g => ({
       ...g,
-      drugs: g.drugs.filter(d => d.toLowerCase().includes(q) || g.class.toLowerCase().includes(q))
+      drugs: g.drugs.filter(drug => drug.name.toLowerCase().includes(q) || g.class.toLowerCase().includes(q))
     })).filter(g => g.drugs.length > 0);
   }, [search]);
 
-  // Helpers to read/write localRows
+  // Helpers
   const findRowIndex = (drugName: string, idxInstance = 0) => {
-    // idxInstance helps target nth existing row for same drug; default first
     let count = 0;
     for (let i = 0; i < localRows.length; i++) {
       if (localRows[i].drug_name === drugName) {
@@ -266,14 +317,14 @@ export default function MedicationsPage() {
     return -1;
   };
 
-  function addEmptyRowForDrug(drugName: string, drugClass: string, isNeph: boolean, isPrev: boolean) {
+  function addEmptyRowForDrug(drugId: string, drugName: string, drugClass: string, isNeph: boolean, isPrev: boolean) {
     const newRow: LocalAdminRow = {
       _clientId: `c-${crypto.randomUUID()}`,
       id: null,
-      medication_id: masterMap[drugName]?.id ?? null,    // ensure medication_id attached
+      medication_id: drugId,
       drug_name: drugName,
       drug_class: drugClass,
-      route: masterMap[drugName]?.route ?? null,         // ensure route attached
+      route: masterMap[drugName]?.route ?? null,
       is_nephrotoxic: isNeph,
       is_preventive: isPrev,
       dose: '',
@@ -284,9 +335,8 @@ export default function MedicationsPage() {
     setLocalRows(prev => [...prev, newRow]);
   }
 
-  function duplicateRow(drugName: string, drugClass: string, isNeph: boolean, isPrev: boolean) {
-    // duplication: simply add a new empty row for that drug (as user requested)
-    addEmptyRowForDrug(drugName, drugClass, isNeph, isPrev);
+  function duplicateRow(drugId: string, drugName: string, drugClass: string, isNeph: boolean, isPrev: boolean) {
+    addEmptyRowForDrug(drugId, drugName, drugClass, isNeph, isPrev);
   }
 
   function toggleCheckboxForRow(clientId: string, colIndex: number) {
@@ -300,35 +350,29 @@ export default function MedicationsPage() {
     setLocalRows(prev => prev.map(r => r._clientId === clientId ? { ...r, frequency: val } : r));
   }
 
-  // Delete a local row (if saved -> delete in DB)
   async function deleteRow(clientId: string) {
     const row = localRows.find(r => r._clientId === clientId);
     if (!row) return;
     if (row.saved && row.id) {
-      // delete in DB
       await supabase.from('medication_administration').delete().eq('id', row.id);
     }
     setLocalRows(prev => prev.filter(r => r._clientId !== clientId));
-    // refresh remote summary
     if (patient) {
       const { data } = await supabase.from('medication_summary_per_patient').select('*').eq('patient_id', patient.id).maybeSingle();
       setRemoteSummary(data || null);
     }
   }
 
-  // When user clicks a quick checkbox on a master row (no duplicate selected row exists),
-  // create/modify the first local row for that drug (makes UI behave like ticking on CRF).
-  function handleMasterRowToggle(drugName: string, drugClass: string, isNeph: boolean, isPrev: boolean, colIndex: number) {
-    // find first local row for this drug; if none, create one then toggle
-    const idx = findRowIndex(drugName, 0);
+  function handleMasterRowToggle(drug: { id: string; name: string }, drugClass: string, isNeph: boolean, isPrev: boolean, colIndex: number) {
+    const idx = findRowIndex(drug.name, 0);
     if (idx === -1) {
       const newRow: LocalAdminRow = {
         _clientId: `c-${crypto.randomUUID()}`,
         id: null,
-        medication_id: masterMap[drugName]?.id ?? null,
-        drug_name: drugName,
+        medication_id: drug.id,
+        drug_name: drug.name,
         drug_class: drugClass,
-        route: masterMap[drugName]?.route ?? null,
+        route: masterMap[drug.name]?.route ?? null,
         is_nephrotoxic: isNeph,
         is_preventive: isPrev,
         dose: '',
@@ -344,12 +388,10 @@ export default function MedicationsPage() {
     toggleCheckboxForRow(clientId, colIndex);
   }
 
-  // Save all localRows -> medication_administration in DB
   async function saveAll() {
     if (!patient) return;
     setSaving(true);
 
-    // VALIDATION: ensure every row has a medication_id (either stored or available in masterMap)
     const missingMasters: string[] = [];
     for (const r of localRows) {
       const mappedId = r.medication_id ?? masterMap[r.drug_name]?.id ?? null;
@@ -359,15 +401,12 @@ export default function MedicationsPage() {
     }
     if (missingMasters.length > 0) {
       setSaving(false);
-      alert(`Cannot save — master IDs missing for: ${missingMasters.join(', ')}\n\nFix medications_master entries or correct spelling in DRUG_LIST.`);
+      alert(`Cannot save — master IDs missing for: ${missingMasters.join(', ')}`);
       console.error('Missing masterMap entries for:', missingMasters);
       return;
     }
 
-    // Build upsert payload: map each local row to medication_administration fields
-    // day1..day7 booleans come from dayChecks array
     const payload = localRows.map(r => {
-      // map drug_name -> medication_id if possible
       const medication_id = r.medication_id ?? masterMap[r.drug_name]?.id ?? null;
       const rowPayload: any = {
         patient_id: patient.id,
@@ -377,33 +416,20 @@ export default function MedicationsPage() {
         drug_class: r.drug_class,
         is_nephrotoxic: r.is_nephrotoxic,
         is_preventive: r.is_preventive,
-        // NOTE: route is kept in frontend rows but not sent to DB to avoid schema mismatch;
-        // if you want to persist route, ensure a route column exists and add it here.
       };
-      for (let i = 0; i < 7; i++) {
-        rowPayload[`day${i+1}`] = !!r.dayChecks[i];
-      }
-      // include id to update if exists
+      for (let i = 0; i < 7; i++) rowPayload[`day${i+1}`] = !!r.dayChecks[i];
       if (r.id) rowPayload.id = r.id;
       return rowPayload;
     });
 
-    // Upsert. Note: medication_administration has id primary key (uuid) and medication_id fk.
     try {
-      // Use insert for new rows and update for existing rows to avoid primary key conflict complexity:
-      // 1) Update existing rows
       for (const r of payload.filter(p => p.id)) {
-        const id = r.id;
-        const { error } = await supabase.from('medication_administration').update(r).eq('id', id);
-        if (error) console.error('update err', error);
+        await supabase.from('medication_administration').update(r).eq('id', r.id);
       }
-      // 2) Insert new rows (those without id)
       const inserts = payload.filter(p => !p.id);
       if (inserts.length > 0) {
-        const { error } = await supabase.from('medication_administration').insert(inserts);
-        if (error) console.error('insert err', error);
+        await supabase.from('medication_administration').insert(inserts);
       }
-      // After save, reload local rows from DB to sync ids & saved flags
       const { data: admins } = await supabase.from('medication_administration').select('*').eq('patient_id', patient.id);
       const newLocal = (admins || []).map((a: any) => {
         const found = Object.values(masterMap).find(x => x?.id === a.medication_id);
@@ -413,7 +439,7 @@ export default function MedicationsPage() {
           medication_id: a.medication_id,
           drug_name: found?.drug_name ?? (a.drug_name ?? 'Unknown'),
           drug_class: a.drug_class ?? found?.drug_class ?? '',
-          route: found?.route ?? a.route ?? null, // keep route in synced rows
+          route: found?.route ?? a.route ?? null,
           is_nephrotoxic: a.is_nephrotoxic ?? found?.is_nephrotoxic ?? false,
           is_preventive: a.is_preventive ?? found?.is_preventive ?? false,
           dose: a.dose ?? '',
@@ -423,7 +449,6 @@ export default function MedicationsPage() {
         } as LocalAdminRow;
       }) as LocalAdminRow[];
       setLocalRows(newLocal);
-      // reload remote summary
       const { data: summary } = await supabase.from('medication_summary_per_patient').select('*').eq('patient_id', patient.id).maybeSingle();
       setRemoteSummary(summary || null);
     } catch (err) {
@@ -434,44 +459,43 @@ export default function MedicationsPage() {
     }
   }
 
-  // Local summary computed from localRows (so UI reacts before server save)
+  // ✅ Summary unchanged
   const localSummary = useMemo(() => {
-    const buckets: Record<string, number> = {
+    const b: Record<string, number> = {
       pre_cag: 0, cag_0_24: 0, cag_48: 0, cag_72: 0,
       pre_ptca: 0, ptca_0_24: 0, ptca_48: 0, ptca_72: 0,
       prev_pre_cag: 0, prev_cag_0_24: 0, prev_cag_48: 0, prev_cag_72: 0,
       prev_pre_ptca: 0, prev_ptca_0_24: 0, prev_ptca_48: 0, prev_ptca_72: 0
     };
-
     for (const r of localRows) {
-      for (let i = 0; i < (dateOptions.length || 0); i++) {
+      for (let i = 0; i < dateOptions.length; i++) {
         if (!r.dayChecks[i]) continue;
         const date = dateOptions[i];
         const cLab = classifyTimingLabel(date, patient?.procedure_datetime_cag ?? null, 'CAG');
         const pLab = classifyTimingLabel(date, patient?.procedure_datetime_ptca ?? null, 'PTCA');
         if (r.is_nephrotoxic) {
-          if (cLab === 'Pre CAG') buckets.pre_cag++;
-          if (cLab === '0–24 CAG') buckets.cag_0_24++;
-          if (cLab === '48 CAG') buckets.cag_48++;
-          if (cLab === '72 CAG') buckets.cag_72++;
-          if (pLab === 'Pre PTCA') buckets.pre_ptca++;
-          if (pLab === '0–24 PTCA') buckets.ptca_0_24++;
-          if (pLab === '48 PTCA') buckets.ptca_48++;
-          if (pLab === '72 PTCA') buckets.ptca_72++;
+          if (cLab === 'Pre CAG') b.pre_cag++;
+          if (cLab === '0–24 CAG') b.cag_0_24++;
+          if (cLab === '48 CAG') b.cag_48++;
+          if (cLab === '72 CAG') b.cag_72++;
+          if (pLab === 'Pre PTCA') b.pre_ptca++;
+          if (pLab === '0–24 PTCA') b.ptca_0_24++;
+          if (pLab === '48 PTCA') b.ptca_48++;
+          if (pLab === '72 PTCA') b.ptca_72++;
         }
         if (r.is_preventive) {
-          if (cLab === 'Pre CAG') buckets.prev_pre_cag++;
-          if (cLab === '0–24 CAG') buckets.prev_cag_0_24++;
-          if (cLab === '48 CAG') buckets.prev_cag_48++;
-          if (cLab === '72 CAG') buckets.prev_cag_72++;
-          if (pLab === 'Pre PTCA') buckets.prev_pre_ptca++;
-          if (pLab === '0–24 PTCA') buckets.prev_ptca_0_24++;
-          if (pLab === '48 PTCA') buckets.prev_ptca_48++;
-          if (pLab === '72 PTCA') buckets.prev_ptca_72++;
+          if (cLab === 'Pre CAG') b.prev_pre_cag++;
+          if (cLab === '0–24 CAG') b.prev_cag_0_24++;
+          if (cLab === '48 CAG') b.prev_cag_48++;
+          if (cLab === '72 CAG') b.prev_cag_72++;
+          if (pLab === 'Pre PTCA') b.prev_pre_ptca++;
+          if (pLab === '0–24 PTCA') b.prev_ptca_0_24++;
+          if (pLab === '48 PTCA') b.prev_ptca_48++;
+          if (pLab === '72 PTCA') b.prev_ptca_72++;
         }
       }
     }
-    return buckets;
+    return b;
   }, [localRows, dateOptions, patient]);
 
   return (
@@ -499,10 +523,12 @@ export default function MedicationsPage() {
           <thead className="bg-gray-300 sticky top-0">
             <tr>
               <th className="p-2 text-left text-gray-900">Drug</th>
-              <th className="p-2 text-gray-900">Route</th> {/* <-- ADDED Route header */}
+              <th className="p-2 text-gray-900">Route</th>
               <th className="p-2 text-gray-900">Dose</th>
               <th className="p-2 text-gray-900">Freq</th>
-              {dateOptions.map(d => <th key={d} className="p-2 whitespace-nowrap text-gray-900 font-semibold">{d}</th>)}
+              {dateOptions.map(d => (
+                <th key={d} className="p-2 whitespace-nowrap text-gray-900 font-semibold">{d}</th>
+              ))}
               <th className="p-2 text-gray-900">Actions</th>
             </tr>
           </thead>
@@ -510,26 +536,22 @@ export default function MedicationsPage() {
             {filteredGroups.map(group => (
               <React.Fragment key={group.class}>
                 <tr className="bg-gray-200 font-bold text-gray-900">
-                  {/* UPDATED colSpan to account for Route column (now 5 fixed cols + date columns) */}
                   <td colSpan={5 + dateOptions.length} className="p-2">{group.class}</td>
                 </tr>
 
-                {group.drugs.map(drugName => {
-                  // show all saved rows for this drug (duplicates), then a blank quick row if none saved
-                  const rowsForDrug = localRows.filter(r => r.drug_name === drugName);
-                  // if none exist, show one blank "virtual" row that uses quick toggles
+                {group.drugs.map(drug => {
+                  const rowsForDrug = localRows.filter(r => r.drug_name === drug.name);
                   if (rowsForDrug.length === 0) {
-                    // quick UI row (client-only until saved)
-                    const sampleMaster = masterMap[drugName.trim()];
+                    const sampleMaster = masterMap[drug.name.trim()];
                     const isNeph = sampleMaster?.is_nephrotoxic ?? group.is_nephrotoxic;
                     const isPrev = sampleMaster?.is_preventive ?? group.is_preventive;
                     return (
-                      <tr key={drugName} className={`${isNeph ? 'bg-red-50' : isPrev ? 'bg-green-50' : ''}`}>
+                      <tr key={drug.id} className={`${isNeph ? 'bg-red-50' : isPrev ? 'bg-green-50' : ''}`}>
                         <td className="p-2 text-gray-900 font-medium">
-                          {drugName}
+                          {drug.name}
                           {!sampleMaster && <span className="ml-2 text-xs text-red-700"> (master not found)</span>}
                         </td>
-                        <td className="p-1 text-gray-900">{sampleMaster?.route ?? '-'}</td> {/* <-- show route */}
+                        <td className="p-1 text-gray-900">{sampleMaster?.route ?? '-'}</td>
                         <td className="p-1 text-gray-900">-</td>
                         <td className="p-1 text-gray-900">-</td>
                         {dateOptions.map((d, i) => {
@@ -537,7 +559,7 @@ export default function MedicationsPage() {
                           const ptcaLabel = classifyTimingLabel(d, patient?.procedure_datetime_ptca ?? null, 'PTCA');
                           return (
                             <td key={d} className="p-1 text-center">
-                              <input type="checkbox" onChange={() => handleMasterRowToggle(drugName, group.class, isNeph, isPrev, i)} />
+                              <input type="checkbox" onChange={() => handleMasterRowToggle(drug, group.class, isNeph, isPrev, i)} />
                               <div className="mt-1 text-xs flex flex-col gap-1 items-center">
                                 {cagLabel && <span className={`px-1 rounded text-xs font-semibold ${chipClass(cagLabel)}`}>{cagLabel}</span>}
                                 {ptcaLabel && <span className={`px-1 rounded text-xs font-semibold ${chipClass(ptcaLabel)}`}>{ptcaLabel}</span>}
@@ -546,20 +568,19 @@ export default function MedicationsPage() {
                           );
                         })}
                         <td className="p-1">
-                          <button className="btn btn-xs btn-outline" onClick={() => duplicateRow(drugName, group.class, isNeph, isPrev)}>➕</button>
+                          <button className="btn btn-xs btn-outline" onClick={() => duplicateRow(drug.id, drug.name, group.class, isNeph, isPrev)}>➕</button>
                         </td>
                       </tr>
                     );
                   }
 
-                  // render each saved or unsaved row for this drug
                   return rowsForDrug.map(r => (
                     <tr key={r._clientId} className={`${r.is_nephrotoxic ? 'bg-red-50' : r.is_preventive ? 'bg-green-50' : ''}`}>
                       <td className="p-2 text-gray-900 font-medium">
                         {r.drug_name}
                         {!r.medication_id && <span className="ml-2 text-xs text-red-700">(no master id)</span>}
                       </td>
-                      <td className="p-1 text-gray-900">{r.route ?? '-'}</td> {/* <-- show route */}
+                      <td className="p-1 text-gray-900">{r.route ?? '-'}</td>
                       <td className="p-1">
                         <input
                           className="border p-1 rounded w-full text-sm text-gray-900 border-gray-400"
@@ -591,7 +612,7 @@ export default function MedicationsPage() {
 
                       <td className="p-1">
                         <div className="flex gap-2">
-                          <button className="btn btn-xs btn-outline" onClick={() => duplicateRow(r.drug_name, r.drug_class, r.is_nephrotoxic, r.is_preventive)}>➕</button>
+                          <button className="btn btn-xs btn-outline" onClick={() => duplicateRow(r.medication_id!, r.drug_name, r.drug_class, r.is_nephrotoxic, r.is_preventive)}>➕</button>
                           <button className="btn btn-xs btn-error" onClick={() => deleteRow(r._clientId)}>Delete</button>
                         </div>
                       </td>
@@ -610,24 +631,32 @@ export default function MedicationsPage() {
         </button>
       </div>
 
-      {/* Summary: show localSummary first (live), then remoteSummary if present */}
+      {/* Summary */}
       <div className="bg-white w-full max-w-6xl mt-6 rounded shadow p-4">
         <h2 className="text-2xl font-bold mb-4 text-gray-900">📊 Summary (Nephrotoxic / Preventive)</h2>
         <table className="w-full border text-center text-gray-900">
-          <thead><tr className="bg-gray-200"><th className="border p-2"></th><th className="border p-2">Nephrotoxic</th><th className="border p-2">Preventive</th></tr></thead>
+          <thead>
+            <tr className="bg-gray-200">
+              <th className="border p-2"></th>
+              <th className="border p-2">Nephrotoxic</th>
+              <th className="border p-2">Preventive</th>
+            </tr>
+          </thead>
           <tbody>
-            <tr><td className="border p-2">Pre CAG</td><td className="border p-2">{(localSummary.pre_cag || 0) > 0 ? '✅' : '❌'}</td><td className="border p-2">{(localSummary.prev_pre_cag || 0) > 0 ? '✅' : '❌'}</td></tr>
-            <tr><td className="border p-2">0–24 CAG</td><td className="border p-2">{(localSummary.cag_0_24 || 0) > 0 ? '✅' : '❌'}</td><td className="border p-2">{(localSummary.prev_cag_0_24 || 0) > 0 ? '✅' : '❌'}</td></tr>
-            <tr><td className="border p-2">48 CAG</td><td className="border p-2">{(localSummary.cag_48 || 0) > 0 ? '✅' : '❌'}</td><td className="border p-2">{(localSummary.prev_cag_48 || 0) > 0 ? '✅' : '❌'}</td></tr>
-            <tr><td className="border p-2">72 CAG</td><td className="border p-2">{(localSummary.cag_72 || 0) > 0 ? '✅' : '❌'}</td><td className="border p-2">{(localSummary.prev_cag_72 || 0) > 0 ? '✅' : '❌'}</td></tr>
-            <tr><td className="border p-2">Pre PTCA</td><td className="border p-2">{(localSummary.pre_ptca || 0) > 0 ? '✅' : '❌'}</td><td className="border p-2">{(localSummary.prev_pre_ptca || 0) > 0 ? '✅' : '❌'}</td></tr>
-            <tr><td className="border p-2">0–24 PTCA</td><td className="border p-2">{(localSummary.ptca_0_24 || 0) > 0 ? '✅' : '❌'}</td><td className="border p-2">{(localSummary.prev_ptca_0_24 || 0) > 0 ? '✅' : '❌'}</td></tr>
-            <tr><td className="border p-2">48 PTCA</td><td className="border p-2">{(localSummary.ptca_48 || 0) > 0 ? '✅' : '❌'}</td><td className="border p-2">{(localSummary.prev_ptca_48 || 0) > 0 ? '✅' : '❌'}</td></tr>
-            <tr><td className="border p-2">72 PTCA</td><td className="border p-2">{(localSummary.ptca_72 || 0) > 0 ? '✅' : '❌'}</td><td className="border p-2">{(localSummary.prev_ptca_72 || 0) > 0 ? '✅' : '❌'}</td></tr>
+            <tr><td className="border p-2">Pre CAG</td><td className="border p-2">{localSummary.pre_cag ? '✅' : '❌'}</td><td className="border p-2">{localSummary.prev_pre_cag ? '✅' : '❌'}</td></tr>
+            <tr><td className="border p-2">0–24 CAG</td><td className="border p-2">{localSummary.cag_0_24 ? '✅' : '❌'}</td><td className="border p-2">{localSummary.prev_cag_0_24 ? '✅' : '❌'}</td></tr>
+            <tr><td className="border p-2">48 CAG</td><td className="border p-2">{localSummary.cag_48 ? '✅' : '❌'}</td><td className="border p-2">{localSummary.prev_cag_48 ? '✅' : '❌'}</td></tr>
+            <tr><td className="border p-2">72 CAG</td><td className="border p-2">{localSummary.cag_72 ? '✅' : '❌'}</td><td className="border p-2">{localSummary.prev_cag_72 ? '✅' : '❌'}</td></tr>
+            <tr><td className="border p-2">Pre PTCA</td><td className="border p-2">{localSummary.pre_ptca ? '✅' : '❌'}</td><td className="border p-2">{localSummary.prev_pre_ptca ? '✅' : '❌'}</td></tr>
+            <tr><td className="border p-2">0–24 PTCA</td><td className="border p-2">{localSummary.ptca_0_24 ? '✅' : '❌'}</td><td className="border p-2">{localSummary.prev_ptca_0_24 ? '✅' : '❌'}</td></tr>
+            <tr><td className="border p-2">48 PTCA</td><td className="border p-2">{localSummary.ptca_48 ? '✅' : '❌'}</td><td className="border p-2">{localSummary.prev_ptca_48 ? '✅' : '❌'}</td></tr>
+            <tr><td className="border p-2">72 PTCA</td><td className="border p-2">{localSummary.ptca_72 ? '✅' : '❌'}</td><td className="border p-2">{localSummary.prev_ptca_72 ? '✅' : '❌'}</td></tr>
           </tbody>
         </table>
         {remoteSummary && (
-          <div className="text-xs text-gray-600 mt-2">DB summary (latest): Nephrotoxic pre-CAG count = {remoteSummary.nephrotoxic_pre_cag_count ?? 0}</div>
+          <div className="text-xs text-gray-600 mt-2">
+            DB summary (latest): Nephrotoxic pre-CAG count = {remoteSummary.nephrotoxic_pre_cag_count ?? 0}
+          </div>
         )}
       </div>
     </div>
