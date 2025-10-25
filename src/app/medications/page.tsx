@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useMemo } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { v4 as uuidv4 } from 'uuid';
+const newId = crypto.randomUUID();
 
 // ---------------- SUPABASE ----------------
 const supabase = createClient(
