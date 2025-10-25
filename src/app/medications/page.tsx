@@ -180,7 +180,7 @@ export default function MedicationsPage() {
     if (!patient) return;
     setSaving(true);
     const upserts = adminRecords.map((r) => ({
-      id: r.id || uuidv4(),
+      id: r.id || crypto.randomUUID(),
       patient_id: patient.id,
       medication_id: r.medication_id,
       dose: r.dose,
