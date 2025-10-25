@@ -194,7 +194,6 @@ function classifyTimingLabel(dateISO: string, procISO: string | null, tag: 'CAG'
   if (diff === 2) return `72 ${tag}`;
   return null;
 }
-
 const chipClass = (label: string) => {
   if (!label) return 'bg-gray-200 text-gray-900 border-gray-400';
   if (label.startsWith('Pre')) return 'bg-green-200 text-green-900 border-green-600';
@@ -204,22 +203,47 @@ const chipClass = (label: string) => {
   return 'bg-gray-200 text-gray-900 border-gray-400';
 };
 
+// map day index (0..6) to db field name
 const dayFieldName = (i: number) => `day${i + 1}`;
+
+// helper to look up drug info from DRUG_LIST by id
+function findDrugById(id?: string | null) {
+  if (!id) return undefined;
+  for (const g of DRUG_LIST) {
+    for (const d of g.drugs) {
+      if (d.id === id) {
+        return {
+          id: d.id,
+          name: d.name,
+          drug_class: g.class,
+          route: (d as any).route ?? null,
+          is_nephrotoxic: g.is_nephrotoxic,
+          is_preventive: g.is_preventive
+        };
+      }
+    }
+  }
+  return undefined;
+}
 
 // ---------- Page Component ----------
 export default function MedicationsPage() {
   const [patient, setPatient] = useState<Patient | null>(null);
-  const [masterMap, setMasterMap] = useState<Record<string, MedicationMasterRow | undefined>>({});
+  // masterMap removed intentionally; we rely on DRUG_LIST directly
   const [localRows, setLocalRows] = useState<LocalAdminRow[]>([]);
   const [search, setSearch] = useState('');
   const [saving, setSaving] = useState(false);
   const [remoteSummary, setRemoteSummary] = useState<any | null>(null);
 
-  // Load active patient + master mapping
+  // Load active patient and admin rows (no medications_master mapping)
   useEffect(() => {
     (async () => {
       const userId = '00000000-0000-0000-0000-000000000001';
-      const { data: active } = await supabase.from('active_patient').select('patient_id').eq('user_id', userId).maybeSingle();
+      const { data: active } = await supabase
+        .from('active_patient')
+        .select('patient_id')
+        .eq('user_id', userId)
+        .maybeSingle();
       if (!active?.patient_id) return;
 
       const { data: p } = await supabase
@@ -229,22 +253,6 @@ export default function MedicationsPage() {
         .single();
       if (p) setPatient(p);
 
-      const { data: masters } = await supabase
-        .from('medications_master')
-        .select('id, drug_name, drug_class, route, is_nephrotoxic, is_preventive');
-      const map: Record<string, MedicationMasterRow | undefined> = {};
-      (masters || []).forEach((m: any) => {
-        map[m.drug_name.trim()] = {
-          id: m.id,
-          drug_name: m.drug_name,
-          drug_class: m.drug_class,
-          route: m.route ?? null,
-          is_nephrotoxic: m.is_nephrotoxic,
-          is_preventive: m.is_preventive
-        };
-      });
-      setMasterMap(map);
-
       if (active?.patient_id) {
         const { data: admins } = await supabase
           .from('medication_administration')
@@ -252,16 +260,16 @@ export default function MedicationsPage() {
           .eq('patient_id', active.patient_id);
         const parsed: LocalAdminRow[] = (admins || []).map((a: any) => {
           const dayChecks = [1,2,3,4,5,6,7].map(i => !!a[`day${i}`]);
-          const foundMaster = Object.values(map).find(mm => mm?.id === a.medication_id);
+          const found = findDrugById(a.medication_id);
           return {
             _clientId: `db-${a.id}`,
             id: a.id,
             medication_id: a.medication_id,
-            drug_name: foundMaster?.drug_name || (a.drug_name ?? 'Unknown'),
-            drug_class: a.drug_class ?? foundMaster?.drug_class ?? '',
-            route: foundMaster?.route ?? a.route ?? null,
-            is_nephrotoxic: a.is_nephrotoxic ?? foundMaster?.is_nephrotoxic ?? false,
-            is_preventive: a.is_preventive ?? foundMaster?.is_preventive ?? false,
+            drug_name: found?.name || (a.drug_name ?? 'Unknown'),
+            drug_class: a.drug_class ?? found?.drug_class ?? '',
+            route: found?.route ?? a.route ?? null,
+            is_nephrotoxic: a.is_nephrotoxic ?? found?.is_nephrotoxic ?? false,
+            is_preventive: a.is_preventive ?? found?.is_preventive ?? false,
             dose: a.dose ?? '',
             frequency: a.frequency ?? '',
             dayChecks,
@@ -280,13 +288,14 @@ export default function MedicationsPage() {
     })();
   }, []);
 
-  // Date window
+  // Date window: 7 columns relative to earliest procedure date (or admission fallback)
   const dateOptions = useMemo(() => {
     if (!patient) return [];
     const cag = patient.procedure_datetime_cag ? new Date(patient.procedure_datetime_cag) : null;
     const ptca = patient.procedure_datetime_ptca ? new Date(patient.procedure_datetime_ptca) : null;
     const earliest = cag && ptca ? (cag < ptca ? cag : ptca) : cag || ptca || new Date();
     const arr: string[] = [];
+    // include one day before (index 0) then next 6 days -> total 7
     for (let i = -1; i <= 5; i++) {
       const d = new Date(earliest);
       d.setDate(earliest.getDate() + i);
@@ -295,7 +304,7 @@ export default function MedicationsPage() {
     return arr;
   }, [patient]);
 
-  // Filtered group view
+  // Filtered group view for UI according to search
   const filteredGroups = useMemo(() => {
     if (!search.trim()) return DRUG_LIST;
     const q = search.trim().toLowerCase();
@@ -305,8 +314,9 @@ export default function MedicationsPage() {
     })).filter(g => g.drugs.length > 0);
   }, [search]);
 
-  // Helpers
+  // Helpers to read/write localRows
   const findRowIndex = (drugName: string, idxInstance = 0) => {
+    // idxInstance helps target nth existing row for same drug; default first
     let count = 0;
     for (let i = 0; i < localRows.length; i++) {
       if (localRows[i].drug_name === drugName) {
@@ -324,7 +334,7 @@ export default function MedicationsPage() {
       medication_id: drugId,
       drug_name: drugName,
       drug_class: drugClass,
-      route: masterMap[drugName]?.route ?? null,
+      route: findDrugById(drugId)?.route ?? null,
       is_nephrotoxic: isNeph,
       is_preventive: isPrev,
       dose: '',
@@ -336,6 +346,7 @@ export default function MedicationsPage() {
   }
 
   function duplicateRow(drugId: string, drugName: string, drugClass: string, isNeph: boolean, isPrev: boolean) {
+    // duplication: simply add a new empty row for that drug (as user requested)
     addEmptyRowForDrug(drugId, drugName, drugClass, isNeph, isPrev);
   }
 
@@ -350,20 +361,26 @@ export default function MedicationsPage() {
     setLocalRows(prev => prev.map(r => r._clientId === clientId ? { ...r, frequency: val } : r));
   }
 
+  // Delete a local row (if saved -> delete in DB)
   async function deleteRow(clientId: string) {
     const row = localRows.find(r => r._clientId === clientId);
     if (!row) return;
     if (row.saved && row.id) {
+      // delete in DB
       await supabase.from('medication_administration').delete().eq('id', row.id);
     }
     setLocalRows(prev => prev.filter(r => r._clientId !== clientId));
+    // refresh remote summary
     if (patient) {
       const { data } = await supabase.from('medication_summary_per_patient').select('*').eq('patient_id', patient.id).maybeSingle();
       setRemoteSummary(data || null);
     }
   }
 
+  // When user clicks a quick checkbox on a master row (no duplicate selected row exists),
+  // create/modify the first local row for that drug (makes UI behave like ticking on CRF).
   function handleMasterRowToggle(drug: { id: string; name: string }, drugClass: string, isNeph: boolean, isPrev: boolean, colIndex: number) {
+    // find first local row for this drug; if none, create one then toggle
     const idx = findRowIndex(drug.name, 0);
     if (idx === -1) {
       const newRow: LocalAdminRow = {
@@ -372,7 +389,7 @@ export default function MedicationsPage() {
         medication_id: drug.id,
         drug_name: drug.name,
         drug_class: drugClass,
-        route: masterMap[drug.name]?.route ?? null,
+        route: findDrugById(drug.id)?.route ?? null,
         is_nephrotoxic: isNeph,
         is_preventive: isPrev,
         dose: '',
@@ -388,26 +405,17 @@ export default function MedicationsPage() {
     toggleCheckboxForRow(clientId, colIndex);
   }
 
+  // Save all localRows -> medication_administration in DB
   async function saveAll() {
     if (!patient) return;
     setSaving(true);
 
-    const missingMasters: string[] = [];
-    for (const r of localRows) {
-      const mappedId = r.medication_id ?? masterMap[r.drug_name]?.id ?? null;
-      if (!mappedId) {
-        if (!missingMasters.includes(r.drug_name)) missingMasters.push(r.drug_name);
-      }
-    }
-    if (missingMasters.length > 0) {
-      setSaving(false);
-      alert(`Cannot save — master IDs missing for: ${missingMasters.join(', ')}`);
-      console.error('Missing masterMap entries for:', missingMasters);
-      return;
-    }
-
+    // VALIDATION removed masterMap dependency: rely on medication_id present in row
+    // Build upsert payload: map each local row to medication_administration fields
+    // day1..day7 booleans come from dayChecks array
     const payload = localRows.map(r => {
-      const medication_id = r.medication_id ?? masterMap[r.drug_name]?.id ?? null;
+      // use medication_id already present on row
+      const medication_id = r.medication_id ?? null;
       const rowPayload: any = {
         patient_id: patient.id,
         medication_id,
@@ -416,30 +424,43 @@ export default function MedicationsPage() {
         drug_class: r.drug_class,
         is_nephrotoxic: r.is_nephrotoxic,
         is_preventive: r.is_preventive,
+        // NOTE: route is kept in frontend rows but not sent to DB to avoid schema mismatch;
+        // if you want to persist route, ensure a route column exists and add it here.
       };
-      for (let i = 0; i < 7; i++) rowPayload[`day${i+1}`] = !!r.dayChecks[i];
+      for (let i = 0; i < 7; i++) {
+        rowPayload[`day${i+1}`] = !!r.dayChecks[i];
+      }
+      // include id to update if exists
       if (r.id) rowPayload.id = r.id;
       return rowPayload;
     });
 
+    // Upsert. Note: medication_administration has id primary key (uuid) and medication_id fk.
     try {
+      // Use insert for new rows and update for existing rows to avoid primary key conflict complexity:
+      // 1) Update existing rows
       for (const r of payload.filter(p => p.id)) {
-        await supabase.from('medication_administration').update(r).eq('id', r.id);
+        const id = r.id;
+        const { error } = await supabase.from('medication_administration').update(r).eq('id', id);
+        if (error) console.error('update err', error);
       }
+      // 2) Insert new rows (those without id)
       const inserts = payload.filter(p => !p.id);
       if (inserts.length > 0) {
-        await supabase.from('medication_administration').insert(inserts);
+        const { error } = await supabase.from('medication_administration').insert(inserts);
+        if (error) console.error('insert err', error);
       }
+      // After save, reload local rows from DB to sync ids & saved flags
       const { data: admins } = await supabase.from('medication_administration').select('*').eq('patient_id', patient.id);
       const newLocal = (admins || []).map((a: any) => {
-        const found = Object.values(masterMap).find(x => x?.id === a.medication_id);
+        const found = findDrugById(a.medication_id);
         return {
           _clientId: `db-${a.id}`,
           id: a.id,
           medication_id: a.medication_id,
-          drug_name: found?.drug_name ?? (a.drug_name ?? 'Unknown'),
+          drug_name: found?.name ?? (a.drug_name ?? 'Unknown'),
           drug_class: a.drug_class ?? found?.drug_class ?? '',
-          route: found?.route ?? a.route ?? null,
+          route: found?.route ?? a.route ?? null, // keep route in synced rows
           is_nephrotoxic: a.is_nephrotoxic ?? found?.is_nephrotoxic ?? false,
           is_preventive: a.is_preventive ?? found?.is_preventive ?? false,
           dose: a.dose ?? '',
@@ -449,6 +470,7 @@ export default function MedicationsPage() {
         } as LocalAdminRow;
       }) as LocalAdminRow[];
       setLocalRows(newLocal);
+      // reload remote summary
       const { data: summary } = await supabase.from('medication_summary_per_patient').select('*').eq('patient_id', patient.id).maybeSingle();
       setRemoteSummary(summary || null);
     } catch (err) {
@@ -459,43 +481,44 @@ export default function MedicationsPage() {
     }
   }
 
-  // ✅ Summary unchanged
+  // Local summary computed from localRows (so UI reacts before server save)
   const localSummary = useMemo(() => {
-    const b: Record<string, number> = {
+    const buckets: Record<string, number> = {
       pre_cag: 0, cag_0_24: 0, cag_48: 0, cag_72: 0,
       pre_ptca: 0, ptca_0_24: 0, ptca_48: 0, ptca_72: 0,
       prev_pre_cag: 0, prev_cag_0_24: 0, prev_cag_48: 0, prev_cag_72: 0,
       prev_pre_ptca: 0, prev_ptca_0_24: 0, prev_ptca_48: 0, prev_ptca_72: 0
     };
+
     for (const r of localRows) {
-      for (let i = 0; i < dateOptions.length; i++) {
+      for (let i = 0; i < (dateOptions.length || 0); i++) {
         if (!r.dayChecks[i]) continue;
         const date = dateOptions[i];
         const cLab = classifyTimingLabel(date, patient?.procedure_datetime_cag ?? null, 'CAG');
         const pLab = classifyTimingLabel(date, patient?.procedure_datetime_ptca ?? null, 'PTCA');
         if (r.is_nephrotoxic) {
-          if (cLab === 'Pre CAG') b.pre_cag++;
-          if (cLab === '0–24 CAG') b.cag_0_24++;
-          if (cLab === '48 CAG') b.cag_48++;
-          if (cLab === '72 CAG') b.cag_72++;
-          if (pLab === 'Pre PTCA') b.pre_ptca++;
-          if (pLab === '0–24 PTCA') b.ptca_0_24++;
-          if (pLab === '48 PTCA') b.ptca_48++;
-          if (pLab === '72 PTCA') b.ptca_72++;
+          if (cLab === 'Pre CAG') buckets.pre_cag++;
+          if (cLab === '0–24 CAG') buckets.cag_0_24++;
+          if (cLab === '48 CAG') buckets.cag_48++;
+          if (cLab === '72 CAG') buckets.cag_72++;
+          if (pLab === 'Pre PTCA') buckets.pre_ptca++;
+          if (pLab === '0–24 PTCA') buckets.ptca_0_24++;
+          if (pLab === '48 PTCA') buckets.ptca_48++;
+          if (pLab === '72 PTCA') buckets.ptca_72++;
         }
         if (r.is_preventive) {
-          if (cLab === 'Pre CAG') b.prev_pre_cag++;
-          if (cLab === '0–24 CAG') b.prev_cag_0_24++;
-          if (cLab === '48 CAG') b.prev_cag_48++;
-          if (cLab === '72 CAG') b.prev_cag_72++;
-          if (pLab === 'Pre PTCA') b.prev_pre_ptca++;
-          if (pLab === '0–24 PTCA') b.prev_ptca_0_24++;
-          if (pLab === '48 PTCA') b.prev_ptca_48++;
-          if (pLab === '72 PTCA') b.prev_ptca_72++;
+          if (cLab === 'Pre CAG') buckets.prev_pre_cag++;
+          if (cLab === '0–24 CAG') buckets.prev_cag_0_24++;
+          if (cLab === '48 CAG') buckets.prev_cag_48++;
+          if (cLab === '72 CAG') buckets.prev_cag_72++;
+          if (pLab === 'Pre PTCA') buckets.prev_pre_ptca++;
+          if (pLab === '0–24 PTCA') buckets.prev_ptca_0_24++;
+          if (pLab === '48 PTCA') buckets.prev_ptca_48++;
+          if (pLab === '72 PTCA') buckets.prev_ptca_72++;
         }
       }
     }
-    return b;
+    return buckets;
   }, [localRows, dateOptions, patient]);
 
   return (
@@ -523,12 +546,10 @@ export default function MedicationsPage() {
           <thead className="bg-gray-300 sticky top-0">
             <tr>
               <th className="p-2 text-left text-gray-900">Drug</th>
-              <th className="p-2 text-gray-900">Route</th>
+              <th className="p-2 text-gray-900">Route</th> {/* Route shown when available */}
               <th className="p-2 text-gray-900">Dose</th>
               <th className="p-2 text-gray-900">Freq</th>
-              {dateOptions.map(d => (
-                <th key={d} className="p-2 whitespace-nowrap text-gray-900 font-semibold">{d}</th>
-              ))}
+              {dateOptions.map(d => <th key={d} className="p-2 whitespace-nowrap text-gray-900 font-semibold">{d}</th>)}
               <th className="p-2 text-gray-900">Actions</th>
             </tr>
           </thead>
@@ -536,22 +557,24 @@ export default function MedicationsPage() {
             {filteredGroups.map(group => (
               <React.Fragment key={group.class}>
                 <tr className="bg-gray-200 font-bold text-gray-900">
+                  {/* 5 fixed cols (Drug, Route, Dose, Freq, Actions) + date columns */}
                   <td colSpan={5 + dateOptions.length} className="p-2">{group.class}</td>
                 </tr>
 
                 {group.drugs.map(drug => {
+                  // show all saved rows for this drug (duplicates), then a blank quick row if none saved
                   const rowsForDrug = localRows.filter(r => r.drug_name === drug.name);
+                  // if none exist, show one blank "virtual" row that uses quick toggles
                   if (rowsForDrug.length === 0) {
-                    const sampleMaster = masterMap[drug.name.trim()];
-                    const isNeph = sampleMaster?.is_nephrotoxic ?? group.is_nephrotoxic;
-                    const isPrev = sampleMaster?.is_preventive ?? group.is_preventive;
+                    // quick UI row (client-only until saved)
+                    const isNeph = group.is_nephrotoxic;
+                    const isPrev = group.is_preventive;
                     return (
                       <tr key={drug.id} className={`${isNeph ? 'bg-red-50' : isPrev ? 'bg-green-50' : ''}`}>
                         <td className="p-2 text-gray-900 font-medium">
                           {drug.name}
-                          {!sampleMaster && <span className="ml-2 text-xs text-red-700"> (master not found)</span>}
                         </td>
-                        <td className="p-1 text-gray-900">{sampleMaster?.route ?? '-'}</td>
+                        <td className="p-1 text-gray-900">{'-'}</td>
                         <td className="p-1 text-gray-900">-</td>
                         <td className="p-1 text-gray-900">-</td>
                         {dateOptions.map((d, i) => {
@@ -574,6 +597,7 @@ export default function MedicationsPage() {
                     );
                   }
 
+                  // render each saved or unsaved row for this drug
                   return rowsForDrug.map(r => (
                     <tr key={r._clientId} className={`${r.is_nephrotoxic ? 'bg-red-50' : r.is_preventive ? 'bg-green-50' : ''}`}>
                       <td className="p-2 text-gray-900 font-medium">
@@ -612,7 +636,7 @@ export default function MedicationsPage() {
 
                       <td className="p-1">
                         <div className="flex gap-2">
-                          <button className="btn btn-xs btn-outline" onClick={() => duplicateRow(r.medication_id!, r.drug_name, r.drug_class, r.is_nephrotoxic, r.is_preventive)}>➕</button>
+                          <button className="btn btn-xs btn-outline" onClick={() => duplicateRow(r.medication_id ?? '', r.drug_name, r.drug_class, r.is_nephrotoxic, r.is_preventive)}>➕</button>
                           <button className="btn btn-xs btn-error" onClick={() => deleteRow(r._clientId)}>Delete</button>
                         </div>
                       </td>
@@ -631,32 +655,24 @@ export default function MedicationsPage() {
         </button>
       </div>
 
-      {/* Summary */}
+      {/* Summary: show localSummary first (live), then remoteSummary if present */}
       <div className="bg-white w-full max-w-6xl mt-6 rounded shadow p-4">
         <h2 className="text-2xl font-bold mb-4 text-gray-900">📊 Summary (Nephrotoxic / Preventive)</h2>
         <table className="w-full border text-center text-gray-900">
-          <thead>
-            <tr className="bg-gray-200">
-              <th className="border p-2"></th>
-              <th className="border p-2">Nephrotoxic</th>
-              <th className="border p-2">Preventive</th>
-            </tr>
-          </thead>
+          <thead><tr className="bg-gray-200"><th className="border p-2"></th><th className="border p-2">Nephrotoxic</th><th className="border p-2">Preventive</th></tr></thead>
           <tbody>
-            <tr><td className="border p-2">Pre CAG</td><td className="border p-2">{localSummary.pre_cag ? '✅' : '❌'}</td><td className="border p-2">{localSummary.prev_pre_cag ? '✅' : '❌'}</td></tr>
-            <tr><td className="border p-2">0–24 CAG</td><td className="border p-2">{localSummary.cag_0_24 ? '✅' : '❌'}</td><td className="border p-2">{localSummary.prev_cag_0_24 ? '✅' : '❌'}</td></tr>
-            <tr><td className="border p-2">48 CAG</td><td className="border p-2">{localSummary.cag_48 ? '✅' : '❌'}</td><td className="border p-2">{localSummary.prev_cag_48 ? '✅' : '❌'}</td></tr>
-            <tr><td className="border p-2">72 CAG</td><td className="border p-2">{localSummary.cag_72 ? '✅' : '❌'}</td><td className="border p-2">{localSummary.prev_cag_72 ? '✅' : '❌'}</td></tr>
-            <tr><td className="border p-2">Pre PTCA</td><td className="border p-2">{localSummary.pre_ptca ? '✅' : '❌'}</td><td className="border p-2">{localSummary.prev_pre_ptca ? '✅' : '❌'}</td></tr>
-            <tr><td className="border p-2">0–24 PTCA</td><td className="border p-2">{localSummary.ptca_0_24 ? '✅' : '❌'}</td><td className="border p-2">{localSummary.prev_ptca_0_24 ? '✅' : '❌'}</td></tr>
-            <tr><td className="border p-2">48 PTCA</td><td className="border p-2">{localSummary.ptca_48 ? '✅' : '❌'}</td><td className="border p-2">{localSummary.prev_ptca_48 ? '✅' : '❌'}</td></tr>
-            <tr><td className="border p-2">72 PTCA</td><td className="border p-2">{localSummary.ptca_72 ? '✅' : '❌'}</td><td className="border p-2">{localSummary.prev_ptca_72 ? '✅' : '❌'}</td></tr>
+            <tr><td className="border p-2">Pre CAG</td><td className="border p-2">{(localSummary.pre_cag || 0) > 0 ? '✅' : '❌'}</td><td className="border p-2">{(localSummary.prev_pre_cag || 0) > 0 ? '✅' : '❌'}</td></tr>
+            <tr><td className="border p-2">0–24 CAG</td><td className="border p-2">{(localSummary.cag_0_24 || 0) > 0 ? '✅' : '❌'}</td><td className="border p-2">{(localSummary.prev_cag_0_24 || 0) > 0 ? '✅' : '❌'}</td></tr>
+            <tr><td className="border p-2">48 CAG</td><td className="border p-2">{(localSummary.cag_48 || 0) > 0 ? '✅' : '❌'}</td><td className="border p-2">{(localSummary.prev_cag_48 || 0) > 0 ? '✅' : '❌'}</td></tr>
+            <tr><td className="border p-2">72 CAG</td><td className="border p-2">{(localSummary.cag_72 || 0) > 0 ? '✅' : '❌'}</td><td className="border p-2">{(localSummary.prev_cag_72 || 0) > 0 ? '✅' : '❌'}</td></tr>
+            <tr><td className="border p-2">Pre PTCA</td><td className="border p-2">{(localSummary.pre_ptca || 0) > 0 ? '✅' : '❌'}</td><td className="border p-2">{(localSummary.prev_pre_ptca || 0) > 0 ? '✅' : '❌'}</td></tr>
+            <tr><td className="border p-2">0–24 PTCA</td><td className="border p-2">{(localSummary.ptca_0_24 || 0) > 0 ? '✅' : '❌'}</td><td className="border p-2">{(localSummary.prev_ptca_0_24 || 0) > 0 ? '✅' : '❌'}</td></tr>
+            <tr><td className="border p-2">48 PTCA</td><td className="border p-2">{(localSummary.ptca_48 || 0) > 0 ? '✅' : '❌'}</td><td className="border p-2">{(localSummary.prev_ptca_48 || 0) > 0 ? '✅' : '❌'}</td></tr>
+            <tr><td className="border p-2">72 PTCA</td><td className="border p-2">{(localSummary.ptca_72 || 0) > 0 ? '✅' : '❌'}</td><td className="border p-2">{(localSummary.prev_ptca_72 || 0) > 0 ? '✅' : '❌'}</td></tr>
           </tbody>
         </table>
         {remoteSummary && (
-          <div className="text-xs text-gray-600 mt-2">
-            DB summary (latest): Nephrotoxic pre-CAG count = {remoteSummary.nephrotoxic_pre_cag_count ?? 0}
-          </div>
+          <div className="text-xs text-gray-600 mt-2">DB summary (latest): Nephrotoxic pre-CAG count = {remoteSummary.nephrotoxic_pre_cag_count ?? 0}</div>
         )}
       </div>
     </div>
