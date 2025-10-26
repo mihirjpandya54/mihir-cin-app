@@ -3,11 +3,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
+// ---------- Supabase ----------
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
+// ---------- Types ----------
 type Patient = {
   id: string;
   patient_name: string;
@@ -19,29 +21,32 @@ type Patient = {
 type BPRow = {
   _clientId: string;
   id?: string | null;
-  sbp_max: string;
-  sbp_min: string;
-  sbp_avg: string;
-  dbp_max: string;
-  dbp_min: string;
-  dbp_avg: string;
-  map_max: string;
-  map_min: string;
-  map_avg: string;
+  sbp_max?: number | null;
+  sbp_min?: number | null;
+  sbp_avg?: number | null;
+  dbp_max?: number | null;
+  dbp_min?: number | null;
+  dbp_avg?: number | null;
+  map_max?: number | null;
+  map_min?: number | null;
+  map_avg?: number | null;
   date: string;
+  timing_label: string | null;
   saved?: boolean;
 };
 
 type FluidRow = {
   _clientId: string;
   id?: string | null;
-  intake_ml: string;
-  output_ml: string;
-  balance_ml: string;
+  intake_ml?: number | null;
+  output_ml?: number | null;
+  balance_ml?: number | null;
   date: string;
+  timing_label: string | null;
   saved?: boolean;
 };
 
+// ---------- Helpers ----------
 const fmtDate = (d: Date) => d.toISOString().slice(0, 10);
 
 function classifyTimingLabel(dateISO: string, procISO: string | null, tag: 'CAG' | 'PTCA') {
@@ -66,22 +71,14 @@ const chipClass = (label: string) => {
   return 'bg-gray-200 text-gray-900 border-gray-400';
 };
 
-// MAP formula
-function calcMAP(sbp: string, dbp: string): string {
-  const s = parseFloat(sbp);
-  const d = parseFloat(dbp);
-  if (isNaN(s) || isNaN(d)) return '';
-  const map = (s + 2 * d) / 3;
-  return map.toFixed(1);
-}
-
-export default function BPAndFluidsPage() {
+// ---------- Page ----------
+export default function BPFluidsPage() {
   const [patient, setPatient] = useState<Patient | null>(null);
   const [bpRows, setBpRows] = useState<BPRow[]>([]);
   const [fluidRows, setFluidRows] = useState<FluidRow[]>([]);
   const [saving, setSaving] = useState(false);
 
-  // Load active patient & data
+  // ---------- Load patient and data ----------
   useEffect(() => {
     (async () => {
       const userId = '00000000-0000-0000-0000-000000000001';
@@ -99,45 +96,41 @@ export default function BPAndFluidsPage() {
         .single();
       if (p) setPatient(p);
 
-      const { data: bpData } = await supabase
+      const { data: bp } = await supabase
         .from('bp_chart')
         .select('*')
         .eq('patient_id', active.patient_id);
 
-      const { data: fluidData } = await supabase
+      const { data: fluids } = await supabase
         .from('fluid_chart')
         .select('*')
         .eq('patient_id', active.patient_id);
 
-      setBpRows((bpData || []).map((r: any) => ({
-        _clientId: `db-${r.id}`,
-        id: r.id,
-        sbp_max: r.sbp_max ?? '',
-        sbp_min: r.sbp_min ?? '',
-        sbp_avg: r.sbp_avg ?? '',
-        dbp_max: r.dbp_max ?? '',
-        dbp_min: r.dbp_min ?? '',
-        dbp_avg: r.dbp_avg ?? '',
-        map_max: r.map_max ?? '',
-        map_min: r.map_min ?? '',
-        map_avg: r.map_avg ?? '',
-        date: r.bp_date,
-        saved: true
-      })));
+      if (bp) {
+        setBpRows(
+          bp.map((b: any) => ({
+            _clientId: `db-${b.id}`,
+            ...b,
+            date: b.bp_date,
+            saved: true,
+          }))
+        );
+      }
 
-      setFluidRows((fluidData || []).map((r: any) => ({
-        _clientId: `db-${r.id}`,
-        id: r.id,
-        intake_ml: r.intake_ml ?? '',
-        output_ml: r.output_ml ?? '',
-        balance_ml: r.balance_ml ?? '',
-        date: r.fluid_date,
-        saved: true
-      })));
+      if (fluids) {
+        setFluidRows(
+          fluids.map((f: any) => ({
+            _clientId: `db-${f.id}`,
+            ...f,
+            date: f.fluid_date,
+            saved: true,
+          }))
+        );
+      }
     })();
   }, []);
 
-  // 7 date columns
+  // ---------- Date Options ----------
   const dateOptions = useMemo(() => {
     if (!patient) return [];
     const cag = patient.procedure_datetime_cag ? new Date(patient.procedure_datetime_cag) : null;
@@ -152,91 +145,91 @@ export default function BPAndFluidsPage() {
     return arr;
   }, [patient]);
 
-  // 🩺 BP field update with MAP auto calc
-  const updateBPField = (date: string, field: keyof BPRow, value: string) => {
+  // ---------- MAP Calculation ----------
+  function calcMap(sbp: number | null, dbp: number | null) {
+    if (sbp == null || dbp == null) return null;
+    return Math.round(((sbp + 2 * dbp) / 3) * 10) / 10;
+  }
+
+  // ---------- Update BP field ----------
+  function updateBPField(date: string, field: string, value: any) {
     setBpRows(prev => {
       const idx = prev.findIndex(r => r.date === date);
-      let newRow: BPRow;
       if (idx === -1) {
-        newRow = {
+        const newRow: BPRow = {
           _clientId: `c-${crypto.randomUUID()}`,
           date,
-          sbp_max: '',
-          sbp_min: '',
-          sbp_avg: '',
-          dbp_max: '',
-          dbp_min: '',
-          dbp_avg: '',
-          map_max: '',
-          map_min: '',
-          map_avg: ''
-        };
+          timing_label: '',
+          saved: false,
+          [field]: value
+        } as Record<string, any> as BPRow;
+        return [...prev, newRow];
       } else {
-        newRow = { ...prev[idx] };
+        const copy = [...prev];
+        const updated = { ...(copy[idx] as Record<string, any>) };
+        updated[field] = value;
+
+        // Auto calculate MAP values
+        updated.map_max = calcMap(updated.sbp_max, updated.dbp_max);
+        updated.map_min = calcMap(updated.sbp_min, updated.dbp_min);
+        updated.map_avg = calcMap(updated.sbp_avg, updated.dbp_avg);
+
+        copy[idx] = updated;
+        return copy;
       }
-
-      (newRow as any)[field] = value;
-
-      // Auto MAP calc
-      newRow.map_max = calcMAP(newRow.sbp_max, newRow.dbp_max);
-      newRow.map_min = calcMAP(newRow.sbp_min, newRow.dbp_min);
-      newRow.map_avg = calcMAP(newRow.sbp_avg, newRow.dbp_avg);
-
-      if (idx === -1) return [...prev, newRow];
-      const copy = [...prev];
-      copy[idx] = newRow;
-      return copy;
     });
-  };
+  }
 
-  const updateFluidField = (date: string, field: keyof FluidRow, value: string) => {
+  // ---------- Update Fluid field ----------
+  function updateFluidField(date: string, field: string, value: any) {
     setFluidRows(prev => {
       const idx = prev.findIndex(r => r.date === date);
       if (idx === -1) {
-        return [...prev, { _clientId: `c-${crypto.randomUUID()}`, date, [field]: value } as FluidRow];
+        const newRow: FluidRow = {
+          _clientId: `c-${crypto.randomUUID()}`,
+          date,
+          timing_label: '',
+          saved: false,
+          [field]: value
+        } as Record<string, any> as FluidRow;
+        return [...prev, newRow];
       } else {
         const copy = [...prev];
-const updated: any = { ...(copy[idx] as any) };
-updated[field] = value;
-copy[idx] = updated;
-return copy;
-        
+        const updated = { ...(copy[idx] as Record<string, any>) };
+        updated[field] = value;
+        // auto balance
+        if (updated.intake_ml != null && updated.output_ml != null) {
+          updated.balance_ml = updated.intake_ml - updated.output_ml;
+        }
+        copy[idx] = updated;
+        return copy;
       }
     });
-  };
+  }
 
-  const deleteRow = async (type: 'bp' | 'fluid', clientId: string, id?: string | null) => {
-    if (id) {
-      await supabase.from(type === 'bp' ? 'bp_chart' : 'fluid_chart').delete().eq('id', id);
-    }
-    if (type === 'bp') setBpRows(prev => prev.filter(r => r._clientId !== clientId));
-    else setFluidRows(prev => prev.filter(r => r._clientId !== clientId));
-  };
-
-  const saveAll = async () => {
+  // ---------- Save All ----------
+  async function saveAll() {
     if (!patient) return;
     setSaving(true);
     try {
       // Save BP
       for (const r of bpRows) {
-        const cagLabel = classifyTimingLabel(r.date, patient.procedure_datetime_cag, 'CAG');
-        const ptcaLabel = classifyTimingLabel(r.date, patient.procedure_datetime_ptca, 'PTCA');
-        const timingLabel = cagLabel || ptcaLabel;
         const payload = {
           patient_id: patient.id,
-          sbp_max: r.sbp_max || null,
-          sbp_min: r.sbp_min || null,
-          sbp_avg: r.sbp_avg || null,
-          dbp_max: r.dbp_max || null,
-          dbp_min: r.dbp_min || null,
-          dbp_avg: r.dbp_avg || null,
-          map_max: r.map_max || null,
-          map_min: r.map_min || null,
-          map_avg: r.map_avg || null,
+          sbp_max: r.sbp_max,
+          sbp_min: r.sbp_min,
+          sbp_avg: r.sbp_avg,
+          dbp_max: r.dbp_max,
+          dbp_min: r.dbp_min,
+          dbp_avg: r.dbp_avg,
+          map_max: r.map_max,
+          map_min: r.map_min,
+          map_avg: r.map_avg,
           bp_date: r.date,
-          timing_label: timingLabel
+          timing_label: classifyTimingLabel(r.date, patient.procedure_datetime_cag, 'CAG')
+            || classifyTimingLabel(r.date, patient.procedure_datetime_ptca, 'PTCA'),
         };
-        if (r.id) {
+        if (r.saved && r.id) {
           await supabase.from('bp_chart').update(payload).eq('id', r.id);
         } else {
           await supabase.from('bp_chart').insert(payload);
@@ -245,32 +238,30 @@ return copy;
 
       // Save Fluids
       for (const r of fluidRows) {
-        const cagLabel = classifyTimingLabel(r.date, patient.procedure_datetime_cag, 'CAG');
-        const ptcaLabel = classifyTimingLabel(r.date, patient.procedure_datetime_ptca, 'PTCA');
-        const timingLabel = cagLabel || ptcaLabel;
         const payload = {
           patient_id: patient.id,
-          intake_ml: r.intake_ml || null,
-          output_ml: r.output_ml || null,
-          balance_ml: r.balance_ml || null,
+          intake_ml: r.intake_ml,
+          output_ml: r.output_ml,
+          balance_ml: r.balance_ml,
           fluid_date: r.date,
-          timing_label: timingLabel
+          timing_label: classifyTimingLabel(r.date, patient.procedure_datetime_cag, 'CAG')
+            || classifyTimingLabel(r.date, patient.procedure_datetime_ptca, 'PTCA'),
         };
-        if (r.id) {
+        if (r.saved && r.id) {
           await supabase.from('fluid_chart').update(payload).eq('id', r.id);
         } else {
           await supabase.from('fluid_chart').insert(payload);
         }
       }
 
-      alert('✅ All data saved');
-    } catch (e) {
-      console.error(e);
-      alert('❌ Save failed');
+      alert('Saved successfully ✅');
+    } catch (err) {
+      console.error(err);
+      alert('Save failed ❌ — Check console');
     } finally {
       setSaving(false);
     }
-  };
+  }
 
   return (
     <div className="min-h-screen bg-gray-100 p-5 flex flex-col items-center">
@@ -287,7 +278,7 @@ return copy;
         <table className="w-full text-sm text-gray-900">
           <thead className="bg-gray-300 sticky top-0">
             <tr>
-              <th className="p-2 text-left">Date</th>
+              <th className="p-2">Date</th>
               <th className="p-2">SBP Max</th>
               <th className="p-2">SBP Min</th>
               <th className="p-2">SBP Avg</th>
@@ -298,39 +289,32 @@ return copy;
               <th className="p-2">MAP Min</th>
               <th className="p-2">MAP Avg</th>
               <th className="p-2">Timing</th>
-              <th className="p-2">Actions</th>
             </tr>
           </thead>
           <tbody>
-            {dateOptions.map(d => {
-              const row = bpRows.find(r => r.date === d);
-              const cagLabel = classifyTimingLabel(d, patient?.procedure_datetime_cag ?? null, 'CAG');
-              const ptcaLabel = classifyTimingLabel(d, patient?.procedure_datetime_ptca ?? null, 'PTCA');
-              const timingLabel = cagLabel || ptcaLabel;
+            {dateOptions.map(date => {
+              const row = bpRows.find(r => r.date === date);
+              const timing =
+                classifyTimingLabel(date, patient?.procedure_datetime_cag ?? null, 'CAG') ||
+                classifyTimingLabel(date, patient?.procedure_datetime_ptca ?? null, 'PTCA');
               return (
-                <tr key={d}>
-                  <td className="p-2">{d}</td>
-                  {['sbp_max','sbp_min','sbp_avg','dbp_max','dbp_min','dbp_avg'].map(f=>(
-                    <td key={f} className="p-1">
+                <tr key={date} className="border-b">
+                  <td className="p-2">{date}</td>
+                  {['sbp_max', 'sbp_min', 'sbp_avg', 'dbp_max', 'dbp_min', 'dbp_avg'].map(field => (
+                    <td key={field} className="p-1">
                       <input
-                        className="border p-1 rounded w-full text-sm text-gray-900 border-gray-400"
-                        value={row ? (row as any)[f] : ''}
-                        onChange={e => updateBPField(d, f as keyof BPRow, e.target.value)}
+                        type="number"
+                        className="border rounded w-full p-1"
+                        value={(row as any)?.[field] ?? ''}
+                        onChange={e => updateBPField(date, field, e.target.value ? Number(e.target.value) : null)}
                       />
                     </td>
                   ))}
-                  {['map_max','map_min','map_avg'].map(f=>(
-                    <td key={f} className="p-1 text-center text-gray-900">
-                      {row ? (row as any)[f] : ''}
-                    </td>
-                  ))}
-                  <td className="p-2">
-                    {timingLabel && <span className={`px-2 py-1 rounded text-xs font-semibold ${chipClass(timingLabel)}`}>{timingLabel}</span>}
-                  </td>
-                  <td className="p-1">
-                    {row && (
-                      <button className="btn btn-xs btn-error" onClick={() => deleteRow('bp', row._clientId, row.id)}>Delete</button>
-                    )}
+                  <td className="p-1">{row?.map_max ?? ''}</td>
+                  <td className="p-1">{row?.map_min ?? ''}</td>
+                  <td className="p-1">{row?.map_avg ?? ''}</td>
+                  <td className="p-1 text-xs">
+                    {timing && <span className={`px-1 rounded font-semibold ${chipClass(timing)}`}>{timing}</span>}
                   </td>
                 </tr>
               );
@@ -339,44 +323,40 @@ return copy;
         </table>
       </div>
 
-      {/* Fluid Table */}
-      <div className="overflow-auto w-full max-w-6xl bg-white rounded shadow">
+      {/* Fluids Table */}
+      <div className="overflow-auto w-full max-w-6xl bg-white rounded shadow mb-6">
         <table className="w-full text-sm text-gray-900">
           <thead className="bg-gray-300 sticky top-0">
             <tr>
-              <th className="p-2 text-left">Date</th>
+              <th className="p-2">Date</th>
               <th className="p-2">Intake (ml)</th>
               <th className="p-2">Output (ml)</th>
               <th className="p-2">Balance (ml)</th>
               <th className="p-2">Timing</th>
-              <th className="p-2">Actions</th>
             </tr>
           </thead>
           <tbody>
-            {dateOptions.map(d => {
-              const row = fluidRows.find(r => r.date === d);
-              const cagLabel = classifyTimingLabel(d, patient?.procedure_datetime_cag ?? null, 'CAG');
-              const ptcaLabel = classifyTimingLabel(d, patient?.procedure_datetime_ptca ?? null, 'PTCA');
-              const timingLabel = cagLabel || ptcaLabel;
+            {dateOptions.map(date => {
+              const row = fluidRows.find(r => r.date === date);
+              const timing =
+                classifyTimingLabel(date, patient?.procedure_datetime_cag ?? null, 'CAG') ||
+                classifyTimingLabel(date, patient?.procedure_datetime_ptca ?? null, 'PTCA');
               return (
-                <tr key={d}>
-                  <td className="p-2">{d}</td>
-                  {['intake_ml','output_ml','balance_ml'].map(f=>(
-                    <td key={f} className="p-1">
+                <tr key={date} className="border-b">
+                  <td className="p-2">{date}</td>
+                  {['intake_ml', 'output_ml'].map(field => (
+                    <td key={field} className="p-1">
                       <input
-                        className="border p-1 rounded w-full text-sm text-gray-900 border-gray-400"
-                        value={row ? (row as any)[f] : ''}
-                        onChange={e => updateFluidField(d, f as keyof FluidRow, e.target.value)}
+                        type="number"
+                        className="border rounded w-full p-1"
+                        value={(row as any)?.[field] ?? ''}
+                        onChange={e => updateFluidField(date, field, e.target.value ? Number(e.target.value) : null)}
                       />
                     </td>
                   ))}
-                  <td className="p-2">
-                    {timingLabel && <span className={`px-2 py-1 rounded text-xs font-semibold ${chipClass(timingLabel)}`}>{timingLabel}</span>}
-                  </td>
-                  <td className="p-1">
-                    {row && (
-                      <button className="btn btn-xs btn-error" onClick={() => deleteRow('fluid', row._clientId, row.id)}>Delete</button>
-                    )}
+                  <td className="p-1">{row?.balance_ml ?? ''}</td>
+                  <td className="p-1 text-xs">
+                    {timing && <span className={`px-1 rounded font-semibold ${chipClass(timing)}`}>{timing}</span>}
                   </td>
                 </tr>
               );
@@ -385,16 +365,13 @@ return copy;
         </table>
       </div>
 
-      {/* Save Button */}
-      <div className="w-full max-w-6xl mt-4">
-        <button
-          onClick={saveAll}
-          disabled={!patient || saving}
-          className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-60"
-        >
-          {saving ? 'Saving…' : 'Save All'}
-        </button>
-      </div>
+      <button
+        onClick={saveAll}
+        disabled={!patient || saving}
+        className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-60"
+      >
+        {saving ? 'Saving…' : 'Save All'}
+      </button>
     </div>
   );
 }
