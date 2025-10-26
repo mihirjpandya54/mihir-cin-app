@@ -147,6 +147,24 @@ const DRUG_LIST = [
     ]
   },
   {
+    class: "Vasopressors / Inotropes",
+    is_nephrotoxic: false,
+    is_preventive: false,
+    drugs: [
+      { name: "Noradrenaline" },
+      { name: "Adrenaline" },
+      { name: "Phenylephrine" },
+      { name: "Vasopressin" },
+      { name: "Metaraminol" },
+      { name: "Dopamine" },
+      { name: "Dobutamine" },
+      { name: "Milrinone" },
+      { name: "Levosimendan" },
+      { name: "Ephedrine" },
+      { name: "Isoproterenol" }
+    ]
+  },
+  {
     class: "Preventive Measures",
     is_nephrotoxic: false,
     is_preventive: true,
