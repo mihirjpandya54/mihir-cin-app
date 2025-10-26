@@ -10,6 +10,7 @@ export default function Home() {
     { name: "💊 Past Medication History", path: "/past-medications" },
     { name: "🧪 Lab Reports", path: "/labs" },
     { name: "💊 Medications", path: "/medications" },
+    { name: "🩺 BP & 💧 Fluids", path: "/bp-fluids" },
     { name: "🫀 Procedures", path: "/procedures" },
     { name: "🧠 Hemodynamics", path: "/hemodynamics" },
     { name: "📈 Scores", path: "/scores" },
