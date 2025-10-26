@@ -171,8 +171,8 @@ export default function BPFluidsPage() {
 
         // Auto calculate MAP values
         updated.map_max = calcMap(updated.sbp_max, updated.dbp_max);
-        updated.map_min = calcMap(updated.sbp_min, updated.dbp_min);
         updated.map_avg = calcMap(updated.sbp_avg, updated.dbp_avg);
+        updated.map_min = calcMap(updated.sbp_min, updated.dbp_min);
 
         copy[idx] = updated as unknown as BPRow;
         return copy;
@@ -263,6 +263,18 @@ export default function BPFluidsPage() {
     }
   }
 
+  // ---------- Timing Flag Rendering ----------
+  function renderFlags(date: string) {
+    const cag = classifyTimingLabel(date, patient?.procedure_datetime_cag ?? null, 'CAG');
+    const ptca = classifyTimingLabel(date, patient?.procedure_datetime_ptca ?? null, 'PTCA');
+    return (
+      <div className="flex flex-col items-center text-xs font-semibold">
+        {cag && <span className={`px-1 rounded mb-1 ${chipClass(cag)}`}>{cag}</span>}
+        {ptca && <span className={`px-1 rounded ${chipClass(ptca)}`}>{ptca}</span>}
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-100 p-5 flex flex-col items-center">
       <h1 className="text-3xl font-extrabold mb-4 text-gray-900">🩺 BP & 💧 Fluids</h1>
@@ -280,27 +292,24 @@ export default function BPFluidsPage() {
             <tr>
               <th className="p-2">Date</th>
               <th className="p-2">SBP Max</th>
-              <th className="p-2">SBP Min</th>
-              <th className="p-2">SBP Avg</th>
               <th className="p-2">DBP Max</th>
-              <th className="p-2">DBP Min</th>
+              <th className="p-2">SBP Avg</th>
               <th className="p-2">DBP Avg</th>
+              <th className="p-2">SBP Min</th>
+              <th className="p-2">DBP Min</th>
               <th className="p-2">MAP Max</th>
-              <th className="p-2">MAP Min</th>
               <th className="p-2">MAP Avg</th>
+              <th className="p-2">MAP Min</th>
               <th className="p-2">Timing</th>
             </tr>
           </thead>
           <tbody>
             {dateOptions.map(date => {
               const row = bpRows.find(r => r.date === date);
-              const timing =
-                classifyTimingLabel(date, patient?.procedure_datetime_cag ?? null, 'CAG') ||
-                classifyTimingLabel(date, patient?.procedure_datetime_ptca ?? null, 'PTCA');
               return (
                 <tr key={date} className="border-b">
                   <td className="p-2">{date}</td>
-                  {['sbp_max', 'sbp_min', 'sbp_avg', 'dbp_max', 'dbp_min', 'dbp_avg'].map(field => (
+                  {['sbp_max', 'dbp_max', 'sbp_avg', 'dbp_avg', 'sbp_min', 'dbp_min'].map(field => (
                     <td key={field} className="p-1">
                       <input
                         type="number"
@@ -311,11 +320,9 @@ export default function BPFluidsPage() {
                     </td>
                   ))}
                   <td className="p-1">{row?.map_max ?? ''}</td>
-                  <td className="p-1">{row?.map_min ?? ''}</td>
                   <td className="p-1">{row?.map_avg ?? ''}</td>
-                  <td className="p-1 text-xs">
-                    {timing && <span className={`px-1 rounded font-semibold ${chipClass(timing)}`}>{timing}</span>}
-                  </td>
+                  <td className="p-1">{row?.map_min ?? ''}</td>
+                  <td className="p-1 text-xs">{renderFlags(date)}</td>
                 </tr>
               );
             })}
@@ -338,9 +345,6 @@ export default function BPFluidsPage() {
           <tbody>
             {dateOptions.map(date => {
               const row = fluidRows.find(r => r.date === date);
-              const timing =
-                classifyTimingLabel(date, patient?.procedure_datetime_cag ?? null, 'CAG') ||
-                classifyTimingLabel(date, patient?.procedure_datetime_ptca ?? null, 'PTCA');
               return (
                 <tr key={date} className="border-b">
                   <td className="p-2">{date}</td>
@@ -355,9 +359,7 @@ export default function BPFluidsPage() {
                     </td>
                   ))}
                   <td className="p-1">{row?.balance_ml ?? ''}</td>
-                  <td className="p-1 text-xs">
-                    {timing && <span className={`px-1 rounded font-semibold ${chipClass(timing)}`}>{timing}</span>}
-                  </td>
+                  <td className="p-1 text-xs">{renderFlags(date)}</td>
                 </tr>
               );
             })}
