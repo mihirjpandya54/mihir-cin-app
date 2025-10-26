@@ -194,6 +194,7 @@ function classifyTimingLabel(dateISO: string, procISO: string | null, tag: 'CAG'
   if (diff === 2) return `72 ${tag}`;
   return null;
 }
+
 const chipClass = (label: string) => {
   if (!label) return 'bg-gray-200 text-gray-900 border-gray-400';
   if (label.startsWith('Pre')) return 'bg-green-200 text-green-900 border-green-600';
@@ -253,13 +254,33 @@ export default function MedicationsPage() {
         .single();
       if (p) setPatient(p);
 
+      // compute local dateOptions here (so we can map med_date -> dayChecks immediately)
+      let localDateOptions: string[] = [];
+      if (p) {
+        const cag = p.procedure_datetime_cag ? new Date(p.procedure_datetime_cag) : null;
+        const ptca = p.procedure_datetime_ptca ? new Date(p.procedure_datetime_ptca) : null;
+        const earliest = cag && ptca ? (cag < ptca ? cag : ptca) : cag || ptca || new Date();
+        for (let i = -1; i <= 5; i++) {
+          const d = new Date(earliest);
+          d.setDate(earliest.getDate() + i);
+          localDateOptions.push(fmtDate(d));
+        }
+      }
+
       if (active?.patient_id) {
         const { data: admins } = await supabase
           .from('medication_administration')
           .select('*')
           .eq('patient_id', active.patient_id);
+
+        // Map each DB row to a local row. For med_date -> map to dayChecks using localDateOptions
         const parsed: LocalAdminRow[] = (admins || []).map((a: any) => {
-          const dayChecks = [1,2,3,4,5,6,7].map(i => !!a[`day${i}`]);
+          const medDateStr = a.med_date ? String(a.med_date).slice(0, 10) : null;
+          // build dayChecks relative to localDateOptions
+          const dayChecks = localDateOptions.length
+            ? localDateOptions.map(d => !!medDateStr && medDateStr === d)
+            : [false,false,false,false,false,false,false];
+
           const found = findDrugById(a.medication_id);
           return {
             _clientId: `db-${a.id}`,
@@ -410,45 +431,75 @@ export default function MedicationsPage() {
     if (!patient) return;
     setSaving(true);
 
-    // VALIDATION removed masterMap dependency: rely on medication_id present in row
-    // Build upsert payload: map each local row to medication_administration fields
-    // day1..day7 booleans come from dayChecks array
-    const payload = localRows.map(r => {
-      // use medication_id already present on row
-      const medication_id = r.medication_id ?? null;
-      const rowPayload: any = {
-        patient_id: patient.id,
-        medication_id,
-        dose: r.dose || null,
-        frequency: r.frequency || null,
-        drug_class: r.drug_class,
-        is_nephrotoxic: r.is_nephrotoxic,
-        is_preventive: r.is_preventive,
-        // NOTE: route is kept in frontend rows but not sent to DB to avoid schema mismatch;
-        // if you want to persist route, ensure a route column exists and add it here.
-      };
-      for (let i = 0; i < 7; i++) {
-        rowPayload[`day${i+1}`] = !!r.dayChecks[i];
-      }
-      // include id to update if exists
-      if (r.id) rowPayload.id = r.id;
-      return rowPayload;
-    });
-
-    // Upsert. Note: medication_administration has id primary key (uuid) and medication_id fk.
     try {
-      // Use insert for new rows and update for existing rows to avoid primary key conflict complexity:
-     for (const r of payload) {
-  if (r.id) {
-    await supabase.from('medication_administration').update(r).eq('id', r.id);
-  } else {
-    await supabase.from('medication_administration').insert(r);
-  }
-}
+      // For each local row, create/update/delete DB rows using med_date (one row per checked date)
+      // Strategy:
+      // - if r.id exists: treat that as an existing DB row. If checkedIndexes empty -> delete it.
+      //   otherwise update that DB row to first checked date, and insert additional rows for remaining checked dates.
+      // - if no r.id: insert a DB row for each checked date.
+      for (const r of localRows) {
+        const checkedIndexes = r.dayChecks.map((v,i) => v ? i : -1).filter(i => i !== -1);
+
+        if (r.id) {
+          // existing DB row
+          if (checkedIndexes.length === 0) {
+            // delete original row
+            await supabase.from('medication_administration').delete().eq('id', r.id);
+            continue;
+          } else {
+            // update existing row to first checked date
+            const firstIdx = checkedIndexes[0];
+            const updatePayload: any = {
+              patient_id: patient.id,
+              medication_id: r.medication_id ?? null,
+              dose: r.dose || null,
+              frequency: r.frequency || null,
+              drug_class: r.drug_class,
+              is_nephrotoxic: r.is_nephrotoxic,
+              is_preventive: r.is_preventive,
+              med_date: dateOptions[firstIdx],
+            };
+            await supabase.from('medication_administration').update(updatePayload).eq('id', r.id);
+
+            // insert additional checked dates (if any)
+            const extra = checkedIndexes.slice(1).map(idx => ({
+              patient_id: patient.id,
+              medication_id: r.medication_id ?? null,
+              dose: r.dose || null,
+              frequency: r.frequency || null,
+              drug_class: r.drug_class,
+              is_nephrotoxic: r.is_nephrotoxic,
+              is_preventive: r.is_preventive,
+              med_date: dateOptions[idx],
+            }));
+            if (extra.length > 0) {
+              await supabase.from('medication_administration').insert(extra);
+            }
+          }
+        } else {
+          // new row(s): insert one DB row per checked date
+          const inserts = checkedIndexes.map(idx => ({
+            patient_id: patient.id,
+            medication_id: r.medication_id ?? null,
+            dose: r.dose || null,
+            frequency: r.frequency || null,
+            drug_class: r.drug_class,
+            is_nephrotoxic: r.is_nephrotoxic,
+            is_preventive: r.is_preventive,
+            med_date: dateOptions[idx],
+          }));
+          if (inserts.length > 0) {
+            await supabase.from('medication_administration').insert(inserts);
+          }
+        }
+      }
+
       // After save, reload local rows from DB to sync ids & saved flags
       const { data: admins } = await supabase.from('medication_administration').select('*').eq('patient_id', patient.id);
       const newLocal = (admins || []).map((a: any) => {
         const found = findDrugById(a.medication_id);
+        const medDateStr = a.med_date ? String(a.med_date).slice(0, 10) : null;
+        const dayChecks = dateOptions.length ? dateOptions.map(d => !!medDateStr && medDateStr === d) : [false,false,false,false,false,false,false];
         return {
           _clientId: `db-${a.id}`,
           id: a.id,
@@ -460,11 +511,12 @@ export default function MedicationsPage() {
           is_preventive: a.is_preventive ?? found?.is_preventive ?? false,
           dose: a.dose ?? '',
           frequency: a.frequency ?? '',
-          dayChecks: [1,2,3,4,5,6,7].map(i => !!a[`day${i}`]),
+          dayChecks,
           saved: true
         } as LocalAdminRow;
       }) as LocalAdminRow[];
       setLocalRows(newLocal);
+
       // reload remote summary
       const { data: summary } = await supabase.from('medication_summary_per_patient').select('*').eq('patient_id', patient.id).maybeSingle();
       setRemoteSummary(summary || null);
