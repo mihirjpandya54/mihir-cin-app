@@ -438,18 +438,13 @@ export default function MedicationsPage() {
     // Upsert. Note: medication_administration has id primary key (uuid) and medication_id fk.
     try {
       // Use insert for new rows and update for existing rows to avoid primary key conflict complexity:
-      // 1) Update existing rows
-      for (const r of payload.filter(p => p.id)) {
-        const id = r.id;
-        const { error } = await supabase.from('medication_administration').update(r).eq('id', id);
-        if (error) console.error('update err', error);
-      }
-      // 2) Insert new rows (those without id)
-      const inserts = payload.filter(p => !p.id);
-      if (inserts.length > 0) {
-        const { error } = await supabase.from('medication_administration').insert(inserts);
-        if (error) console.error('insert err', error);
-      }
+     for (const r of payload) {
+  if (r.id) {
+    await supabase.from('medication_administration').update(r).eq('id', r.id);
+  } else {
+    await supabase.from('medication_administration').insert(r);
+  }
+}
       // After save, reload local rows from DB to sync ids & saved flags
       const { data: admins } = await supabase.from('medication_administration').select('*').eq('patient_id', patient.id);
       const newLocal = (admins || []).map((a: any) => {
