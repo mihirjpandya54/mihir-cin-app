@@ -174,7 +174,7 @@ export default function BPFluidsPage() {
         updated.map_min = calcMap(updated.sbp_min, updated.dbp_min);
         updated.map_avg = calcMap(updated.sbp_avg, updated.dbp_avg);
 
-        copy[idx] = updated;
+        copy[idx] = updated as unknown as BPRow;
         return copy;
       }
     });
