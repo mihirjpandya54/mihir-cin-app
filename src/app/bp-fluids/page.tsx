@@ -201,7 +201,7 @@ export default function BPFluidsPage() {
         if (updated.intake_ml != null && updated.output_ml != null) {
           updated.balance_ml = updated.intake_ml - updated.output_ml;
         }
-        copy[idx] = updated copy[idx] = updated as unknown as FluidRow;
+        copy[idx] = updated as unknown as FluidRow;
         return copy;
       }
     });
