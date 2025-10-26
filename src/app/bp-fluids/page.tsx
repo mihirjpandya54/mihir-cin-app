@@ -196,8 +196,11 @@ export default function BPAndFluidsPage() {
         return [...prev, { _clientId: `c-${crypto.randomUUID()}`, date, [field]: value } as FluidRow];
       } else {
         const copy = [...prev];
-        (copy[idx] as any)[field] = value;
-        return copy;
+const updated: any = { ...copy[idx] };
+updated[field] = value;
+copy[idx] = updated;
+return copy;
+        
       }
     });
   };
