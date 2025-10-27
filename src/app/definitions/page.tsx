@@ -290,6 +290,8 @@ export default function DefinitionsPage() {
     const acr_abs = absDiff72 !== null && absDiff72 >= 0.5;
     const acr_rel = relDiff72Pct !== null && relDiff72Pct >= 25;
     const acr_result = acr_abs || acr_rel;
+    // FIX: define peakForStage to use later
+const peakForStage = peak0_7_val ?? null;
 
     return {
       procTag,
