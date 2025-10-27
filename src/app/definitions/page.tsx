@@ -536,7 +536,7 @@ export default function DefinitionsPage() {
                 </div>
 
                 <div className="mt-2 text-xs text-gray-500">
-                  <em>Urine threshold assumes weight = 70 kg → 0.5 mL/kg/hr => 840 mL / 24 h.</em>
+                  <em>Urine threshold assumes weight = 70 kg, 0.5 mL/kg/hr = 840 mL / 24 h</em>
                 </div>
 
                 <div className="mt-2">
