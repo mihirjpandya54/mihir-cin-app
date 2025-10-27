@@ -72,7 +72,7 @@ function classifyTimingLabel(dateISO: string, procISO: string | null, tag: 'CAG'
   const procDate = new Date(proc.getFullYear(), proc.getMonth(), proc.getDate());
   const diff = Math.round((sel.getTime() - procDate.getTime()) / (24 * 60 * 60 * 1000));
   if (diff < 0) return `Pre ${tag}`;
-  if (diff === 0) return `0–24 ${tag}`;
+  if (diff === 0) return `0-24 ${tag}`;
   if (diff === 1) return `48 ${tag}`;
   if (diff === 2) return `72 ${tag}`;
   return null;
@@ -81,7 +81,7 @@ function classifyTimingLabel(dateISO: string, procISO: string | null, tag: 'CAG'
 const chipClass = (label: string | null) => {
   if (!label) return 'bg-gray-200 text-gray-900 border-gray-400';
   if (label.startsWith('Pre')) return 'bg-green-200 text-green-900 border-green-600';
-  if (label.startsWith('0–24')) return 'bg-yellow-200 text-yellow-900 border-yellow-600';
+  if (label.startsWith('0-24')) return 'bg-yellow-200 text-yellow-900 border-yellow-600';
   if (label.startsWith('48')) return 'bg-orange-200 text-orange-900 border-orange-600';
   if (label.startsWith('72')) return 'bg-red-200 text-red-900 border-red-600';
   return 'bg-gray-200 text-gray-900 border-gray-400';
@@ -275,15 +275,8 @@ export default function DefinitionsPage() {
     // KDIGO criteria
     const kdigo_abs48 = absDiff48 !== null && absDiff48 >= 0.3;
     // KDIGO relative: prefer 7-day relative, else use 72h (we'll use relDiff7Pct)
-    const kdigo_rel = relDiff7Pct !== null && relDiff7Pct >= 50; // 1.5x -> 50% increase in percent terms -> careful: 1.5x = 50% increase? Actually 1.5x means 50% increase. So this is correct.
-    // But KDIGO's "≥1.5× baseline within 7 days" -> rel >= 50% exactly (1.5x)
-    // For clarity we use relDiff7Pct >= 50
+    const kdigo_rel = relDiff7Pct !== null && relDiff7Pct >= 50; // 1.5x baseline = 50% increase
     const kdigo_urine = urineTotal > -1 && urineOutputLowAuto; // boolean
-    // dialysis flag stored separately (manual)
-    // compute KDIGO result (dialysis not included here; will be added using provided dialysis value)
-    // KDIGO stage (if dialysis flag true -> stage 3)
-    // Determine peak for staging decisions: use peak0_7_val
-    const peakForStage = peak0_7_val ?? null;
 
     // ESUR: abs >= 0.5 or rel >= 25% in 48-72h (we will use peak0_72_val and relDiff72Pct)
     const esur_abs = absDiff72 !== null && absDiff72 >= 0.5;
@@ -480,180 +473,190 @@ export default function DefinitionsPage() {
       )}
 
       {/* For each procedure: */}
-      {procBlocks.map((b: any) => {
-        const procTag: 'CAG' | 'PTCA' = b.procTag;
-        const existing = existingCinFor(procTag);
-        const dialysisVal = localDialysis[procTag] ?? !!existing?.dialysis_initiated;
-        const urineOverride = localUrineOverride[procTag];
-        const urineAuto = !!b.urineOutputLowAuto;
-        const urineFinal = (urineOverride === null || urineOverride === undefined) ? urineAuto : urineOverride;
+      <div className="w-full max-w-6xl space-y-6">
+        {/* When both exist, show them side-by-side on wide screens */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {procBlocks.map((b: any) => {
+            const procTag: 'CAG' | 'PTCA' = b.procTag;
+            const existing = existingCinFor(procTag);
+            const dialysisVal = localDialysis[procTag] ?? !!existing?.dialysis_initiated;
+            const urineOverride = localUrineOverride[procTag];
+            const urineAuto = !!b.urineOutputLowAuto;
+            const urineFinal = (urineOverride === null || urineOverride === undefined) ? urineAuto : urineOverride;
 
-        // final results (reflect manual dialysis)
-        const kdigoFinal = !!b.kdigo_abs48 || !!b.kdigo_rel || !!b.kdigo_urine || !!dialysisVal;
-        const esurFinal = !!b.esur_result;
-        const ncdrFinal = !!(b.ncdr_abs || b.ncdr_rel) || !!dialysisVal;
-        const acrFinal = !!b.acr_result;
+            // final results (reflect manual dialysis)
+            const kdigoFinal = !!b.kdigo_abs48 || !!b.kdigo_rel || !!b.kdigo_urine || !!dialysisVal;
+            const esurFinal = !!b.esur_result;
+            const ncdrFinal = !!(b.ncdr_abs || b.ncdr_rel) || !!dialysisVal;
+            const acrFinal = !!b.acr_result;
 
-        // KDIGO stage
-        let kdigoStage: string | null = existing?.kdigo_stage ?? null;
-        // if not set derive
-        if (!kdigoStage) {
-          if (dialysisVal) kdigoStage = 'Stage 3';
-          else if (b.peakForStage != null && b.baselineScr != null && b.baselineScr !== 0) {
-            const ratio = b.peakForStage / b.baselineScr;
-            if (ratio >= 3 || (b.peakForStage >= 4.0)) kdigoStage = 'Stage 3';
-            else if (ratio >= 2) kdigoStage = 'Stage 2';
-            else if (b.kdigo_abs48 || ratio >= 1.5) kdigoStage = 'Stage 1';
-            else kdigoStage = null;
-          }
-        }
+            // KDIGO stage
+            let kdigoStage: string | null = existing?.kdigo_stage ?? null;
+            // if not set derive
+            if (!kdigoStage) {
+              if (dialysisVal) kdigoStage = 'Stage 3';
+              else if (b.peakForStage != null && b.baselineScr != null && b.baselineScr !== 0) {
+                const ratio = b.peakForStage / b.baselineScr;
+                if (ratio >= 3 || (b.peakForStage >= 4.0)) kdigoStage = 'Stage 3';
+                else if (ratio >= 2) kdigoStage = 'Stage 2';
+                else if (b.kdigo_abs48 || ratio >= 1.5) kdigoStage = 'Stage 1';
+                else kdigoStage = null;
+              }
+            }
 
-        return (
-          <div key={procTag} className="w-full max-w-6xl bg-white rounded shadow p-4 mb-6">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-xl font-bold text-gray-900">📌 {procTag} — Definitions (anchored at {new Date(b.procISO).toLocaleString()})</h2>
-              <div className="text-sm text-gray-600">Calculated at: {existing?.calculated_at ? new Date(existing.calculated_at).toLocaleString() : '—'}</div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Left: Data summary */}
-              <div className="p-3 border rounded">
-                <h3 className="font-semibold text-gray-900 mb-2">🔎 Data summary</h3>
-                <div className="text-sm text-gray-700 space-y-1">
-                  <div><strong>Baseline SCr:</strong> {b.baselineScr ?? '—' } mg/dL {b.baselineLab ? `(on ${b.baselineLab.lab_date ?? b.baselineLab.created_at})` : ''}</div>
-                  <div><strong>Peak 0–24 h:</strong> {b.peak0_24 ?? '—'} mg/dL</div>
-                  <div><strong>Peak 24–48 h:</strong> {b.peak24_48 ?? '—'} mg/dL</div>
-                  <div><strong>Peak 48–72 h:</strong> {b.peak48_72 ?? '—'} mg/dL</div>
-                  <div><strong>Peak (0–72 h):</strong> {b.peak0_72_val ?? '—'} mg/dL</div>
-                  <div><strong>Peak (0–7 d):</strong> {b.peak0_7_val ?? '—'} mg/dL</div>
-                  <div><strong>Urine output (0–24 h):</strong> {b.urineTotal ?? 0} mL (threshold {b.urineThreshold} mL)</div>
-                </div>
-                <div className="mt-3">
-                  <label className="flex items-center gap-2">
-                    <input type="checkbox" checked={dialysisVal} onChange={(e) => setLocalDialysis(prev => ({ ...prev, [procTag]: e.target.checked }))} />
-                    <span className="text-sm text-gray-800">Dialysis initiated (manual)</span>
-                  </label>
+            return (
+              <div key={procTag} className="bg-white rounded shadow p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h2 className="text-lg font-bold text-gray-900">📌 {procTag} — Definitions</h2>
+                  <div className="text-sm text-gray-600">Anchored at {new Date(b.procISO).toLocaleString()}</div>
                 </div>
 
-                <div className="mt-2 text-xs text-gray-500">
-                  <em>Urine threshold assumes weight = 70 kg, 0.5 mL/kg/hr = 840 mL / 24 h</em>
-                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Left: Data summary */}
+                  <div className="p-3 border rounded">
+                    <h3 className="font-semibold text-gray-900 mb-2">🔎 Data summary</h3>
+                    <div className="text-sm text-gray-700 space-y-1">
+                      <div><strong>Baseline SCr:</strong> {b.baselineScr ?? '—' } mg/dL {b.baselineLab ? `(on ${b.baselineLab.lab_date ?? b.baselineLab.created_at})` : ''}</div>
+                      <div><strong>Peak 0-24 h:</strong> {b.peak0_24 ?? '—'} mg/dL</div>
+                      <div><strong>Peak 24-48 h:</strong> {b.peak24_48 ?? '—'} mg/dL</div>
+                      <div><strong>Peak 48-72 h:</strong> {b.peak48_72 ?? '—'} mg/dL</div>
+                      <div><strong>Peak (0-72 h):</strong> {b.peak0_72_val ?? '—'} mg/dL</div>
+                      <div><strong>Peak (0-7 d):</strong> {b.peak0_7_val ?? '—'} mg/dL</div>
+                      <div><strong>Urine output (0-24 h):</strong> {b.urineTotal ?? 0} mL (threshold {b.urineThreshold} mL)</div>
+                    </div>
 
-                <div className="mt-2">
-                  <label className="flex items-center gap-2">
-                    <input type="checkbox"
-                      checked={urineOverride !== null && urineOverride !== undefined ? !!urineOverride : false}
-                      onChange={(e) => {
-                        // if user toggles this, set override to opposite of auto OR null -> set explicit
-                        const checked = e.target.checked;
-                        setLocalUrineOverride(prev => ({ ...prev, [procTag]: checked }));
-                      }}
-                    />
-                    <span className="text-sm text-gray-800">Manually mark urine_output_low = true (override auto)</span>
-                  </label>
-                  <div className="text-xs text-gray-600 mt-1">Auto: {urineAuto ? 'LOW (< threshold)' : 'OK (≥ threshold)'}. Toggle above to override.</div>
+                    <div className="mt-3">
+                      <label className="flex items-center gap-2">
+                        <input type="checkbox" checked={dialysisVal} onChange={(e) => setLocalDialysis(prev => ({ ...prev, [procTag]: e.target.checked }))} />
+                        <span className="text-sm text-gray-800">Dialysis initiated (manual)</span>
+                      </label>
+                    </div>
+
+                    <div className="mt-2 text-xs text-gray-500">
+                      <em>Urine threshold assumes weight = 70 kg — 0.5 mL/kg/hr = 840 mL / 24 h</em>
+                    </div>
+
+                    <div className="mt-2">
+                      <label className="flex items-center gap-2">
+                        <input type="checkbox"
+                          checked={urineOverride !== null && urineOverride !== undefined ? !!urineOverride : false}
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            setLocalUrineOverride(prev => ({ ...prev, [procTag]: checked }));
+                          }}
+                        />
+                        <span className="text-sm text-gray-800">Mark urine_output_low = true (manual override)</span>
+                      </label>
+                      <div className="text-xs text-gray-600 mt-1">Auto: {urineAuto ? 'LOW (< threshold)' : 'OK (≥ threshold)'}. Toggle above to override.</div>
+                    </div>
+                  </div>
+
+                  {/* Right: Definitions */}
+                  <div className="p-3 border rounded space-y-3">
+                    {/* baseline helper */}
+                    <div className="text-xs text-gray-600 mb-2">
+                      <strong>Baseline labs used:</strong> {b.baselineLab ? `${b.baselineLab.scr ?? '—'} mg/dL on ${b.baselineLab.lab_date ?? b.baselineLab.created_at}` : 'No baseline lab found before procedure'}
+                    </div>
+
+                    {/* KDIGO */}
+                    <div className="p-2 border rounded bg-gray-50">
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <h4 className="font-semibold text-gray-900">KDIGO (2012)</h4>
+                          <div className="text-xs text-gray-600">AKI if any: increase in SCr &gt;= 0.3 mg/dL (48h) OR 1.5 x baseline (7d) OR urine output &lt; 0.5 mL/kg/hr OR dialysis</div>
+                        </div>
+                        <div className="text-sm">{kdigoStage ? <span className="px-2 py-1 rounded bg-yellow-100 text-yellow-800 font-semibold">{kdigoStage}</span> : <span className="text-gray-500">Stage: —</span>}</div>
+                      </div>
+
+                      <div className="mt-2 grid grid-cols-1 gap-1 text-sm">
+                        <div className="flex justify-between items-center">
+                          <div>Absolute SCr rise &gt;= 0.3 mg/dL (48h)</div>
+                          <div className="text-right"><strong>{b.absDiff48 ?? '—'} mg/dL</strong> — <Present ok={b.kdigo_abs48 ?? false} /></div>
+                        </div>
+
+                        <div className="flex justify-between items-center">
+                          <div>Relative SCr rise &gt;= 1.5 x baseline (7d)</div>
+                          <div className="text-right"><strong>{b.relDiff7Pct ?? '—'} %</strong> — <Present ok={b.kdigo_rel ?? false} /></div>
+                        </div>
+
+                        <div className="flex justify-between items-center">
+                          <div>Urine output low (0-24h) &lt; 840 mL</div>
+                          <div className="text-right"><strong>{b.urineTotal ?? 0} mL</strong> — <Present ok={urineFinal} /></div>
+                        </div>
+
+                        <div className="flex justify-between items-center">
+                          <div>Dialysis initiated (manual)</div>
+                          <div className="text-right"><strong>{dialysisVal ? 'Yes' : 'No'}</strong></div>
+                        </div>
+
+                        <div className="mt-2 flex justify-between items-center">
+                          <div className="font-semibold">Final KDIGO</div>
+                          <div className="font-semibold">{kdigoFinal ? <span className="text-green-700">✅ POSITIVE</span> : <span className="text-red-700">❌ NEGATIVE</span>}</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* ESUR */}
+                    <div className="p-2 border rounded bg-gray-50">
+                      <div className="flex justify-between">
+                        <div>
+                          <h4 className="font-semibold text-gray-900">ESUR (1999)</h4>
+                          <div className="text-xs text-gray-600">Increase in SCr &gt;= 0.5 mg/dL OR &gt;=25% within 48-72h</div>
+                        </div>
+                        <div className="text-sm">{esurFinal ? <span className="text-green-700 font-semibold">✅</span> : <span className="text-red-700 font-semibold">❌</span>}</div>
+                      </div>
+
+                      <div className="mt-2 text-sm">
+                        <div className="flex justify-between"><div>Absolute Δ (0-72h)</div><div><strong>{b.absDiff72 ?? '—'} mg/dL</strong> — <Present ok={b.esur_abs ?? false} /></div></div>
+                        <div className="flex justify-between mt-1"><div>Relative Δ % (0-72h)</div><div><strong>{b.relDiff72Pct ?? '—'} %</strong> — <Present ok={b.esur_rel ?? false} /></div></div>
+                        <div className="mt-2 flex justify-between"><div className="font-semibold">Final ESUR</div><div className="font-semibold">{esurFinal ? <span className="text-green-700">✅ POSITIVE</span> : <span className="text-red-700">❌ NEGATIVE</span>}</div></div>
+                      </div>
+                    </div>
+
+                    {/* NCDR */}
+                    <div className="p-2 border rounded bg-gray-50">
+                      <div className="flex justify-between">
+                        <div>
+                          <h4 className="font-semibold text-gray-900">NCDR (CathPCI)</h4>
+                          <div className="text-xs text-gray-600">Increase in SCr &gt;= 0.3 mg/dL OR &gt;=50% within 48h OR dialysis</div>
+                        </div>
+                        <div className="text-sm">{ncdrFinal ? <span className="text-green-700 font-semibold">✅</span> : <span className="text-red-700 font-semibold">❌</span>}</div>
+                      </div>
+
+                      <div className="mt-2 text-sm">
+                        <div className="flex justify-between"><div>Absolute Δ (0-48h)</div><div><strong>{b.absDiff48 ?? '—'} mg/dL</strong> — <Present ok={b.ncdr_abs ?? false} /></div></div>
+                        <div className="flex justify-between mt-1"><div>Relative Δ % (0-48h)</div><div><strong>{b.relDiff48Pct ?? '—'} %</strong> — <Present ok={b.ncdr_rel ?? false} /></div></div>
+                        <div className="mt-2 flex justify-between"><div className="font-semibold">Final NCDR</div><div className="font-semibold">{ncdrFinal ? <span className="text-green-700">✅ POSITIVE</span> : <span className="text-red-700">❌ NEGATIVE</span>}</div></div>
+                      </div>
+                    </div>
+
+                    {/* ACR */}
+                    <div className="p-2 border rounded bg-gray-50">
+                      <div className="flex justify-between">
+                        <div>
+                          <h4 className="font-semibold text-gray-900">ACR</h4>
+                          <div className="text-xs text-gray-600">Increase in SCr &gt;= 0.5 mg/dL OR &gt;=25% within 48-72h</div>
+                        </div>
+                        <div className="text-sm">{acrFinal ? <span className="text-green-700 font-semibold">✅</span> : <span className="text-red-700 font-semibold">❌</span>}</div>
+                      </div>
+
+                      <div className="mt-2 text-sm">
+                        <div className="flex justify-between"><div>Absolute Δ (0-72h)</div><div><strong>{b.absDiff72 ?? '—'} mg/dL</strong> — <Present ok={b.acr_abs ?? false} /></div></div>
+                        <div className="flex justify-between mt-1"><div>Relative Δ % (0-72h)</div><div><strong>{b.relDiff72Pct ?? '—'} %</strong> — <Present ok={b.acr_rel ?? false} /></div></div>
+                        <div className="mt-2 flex justify-between"><div className="font-semibold">Final ACR</div><div className="font-semibold">{acrFinal ? <span className="text-green-700">✅ POSITIVE</span> : <span className="text-red-700">❌ NEGATIVE</span>}</div></div>
+                      </div>
+                    </div>
+
+                  </div>
                 </div>
               </div>
-
-              {/* Right: Definitions */}
-              <div className="p-3 border rounded space-y-3">
-                {/* KDIGO */}
-                <div className="p-2 border rounded bg-gray-50">
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <h4 className="font-semibold text-gray-900">KDIGO (2012)</h4>
-                      <div className="text-xs text-gray-600">AKI if any: ↑SCr ≥0.3 mg/dL (48h) OR ≥1.5× baseline (7d) OR urine output <0.5 mL/kg/hr OR dialysis</div>
-                    </div>
-                    <div className="text-sm">{kdigoStage ? <span className="px-2 py-1 rounded bg-yellow-100 text-yellow-800 font-semibold">{kdigoStage}</span> : <span className="text-gray-500">Stage: —</span>}</div>
-                  </div>
-
-                  <div className="mt-2 grid grid-cols-1 gap-1 text-sm">
-                    <div className="flex justify-between items-center">
-                      <div>Absolute SCr rise ≥ 0.3 mg/dL (48h)</div>
-                      <div className="text-right"><strong>{b.absDiff48 ?? '—'} mg/dL</strong> — <Present ok={b.kdigo_abs48 ?? false} /></div>
-                    </div>
-
-                    <div className="flex justify-between items-center">
-                      <div>Relative SCr rise ≥ 1.5× baseline (7d)</div>
-                      <div className="text-right"><strong>{b.relDiff7Pct ?? '—'} %</strong> — <Present ok={b.kdigo_rel ?? false} /></div>
-                    </div>
-
-                    <div className="flex justify-between items-center">
-                      <div>Urine output low (0–24h) &lt; 840 mL</div>
-                      <div className="text-right"><strong>{b.urineTotal ?? 0} mL</strong> — <Present ok={urineFinal} /></div>
-                    </div>
-
-                    <div className="flex justify-between items-center">
-                      <div>Dialysis initiated (manual)</div>
-                      <div className="text-right"><strong>{dialysisVal ? 'Yes' : 'No'}</strong></div>
-                    </div>
-
-                    <div className="mt-2 flex justify-between items-center">
-                      <div className="font-semibold">Final KDIGO</div>
-                      <div className="font-semibold">{kdigoFinal ? <span className="text-green-700">✅ POSITIVE</span> : <span className="text-red-700">❌ NEGATIVE</span>}</div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* ESUR */}
-                <div className="p-2 border rounded bg-gray-50">
-                  <div className="flex justify-between">
-                    <div>
-                      <h4 className="font-semibold text-gray-900">ESUR (1999)</h4>
-                      <div className="text-xs text-gray-600">Increase in SCr ≥0.5 mg/dL OR ≥25% within 48–72h</div>
-                    </div>
-                    <div className="text-sm">{esurFinal ? <span className="text-green-700 font-semibold">✅</span> : <span className="text-red-700 font-semibold">❌</span>}</div>
-                  </div>
-
-                  <div className="mt-2 text-sm">
-                    <div className="flex justify-between"><div>Absolute Δ (0–72h)</div><div><strong>{b.absDiff72 ?? '—'} mg/dL</strong> — <Present ok={b.esur_abs ?? false} /></div></div>
-                    <div className="flex justify-between mt-1"><div>Relative Δ % (0–72h)</div><div><strong>{b.relDiff72Pct ?? '—'} %</strong> — <Present ok={b.esur_rel ?? false} /></div></div>
-                    <div className="mt-2 flex justify-between"><div className="font-semibold">Final ESUR</div><div className="font-semibold">{esurFinal ? <span className="text-green-700">✅ POSITIVE</span> : <span className="text-red-700">❌ NEGATIVE</span>}</div></div>
-                  </div>
-                </div>
-
-                {/* NCDR */}
-                <div className="p-2 border rounded bg-gray-50">
-                  <div className="flex justify-between">
-                    <div>
-                      <h4 className="font-semibold text-gray-900">NCDR (CathPCI)</h4>
-                      <div className="text-xs text-gray-600">Increase in SCr ≥0.3 mg/dL OR ≥50% within 48h OR dialysis</div>
-                    </div>
-                    <div className="text-sm">{ncdrFinal ? <span className="text-green-700 font-semibold">✅</span> : <span className="text-red-700 font-semibold">❌</span>}</div>
-                  </div>
-
-                  <div className="mt-2 text-sm">
-                    <div className="flex justify-between"><div>Absolute Δ (0–48h)</div><div><strong>{b.absDiff48 ?? '—'} mg/dL</strong> — <Present ok={b.ncdr_abs ?? false} /></div></div>
-                    <div className="flex justify-between mt-1"><div>Relative Δ % (0–48h)</div><div><strong>{b.relDiff48Pct ?? '—'} %</strong> — <Present ok={b.ncdr_rel ?? false} /></div></div>
-                    <div className="mt-2 flex justify-between"><div className="font-semibold">Final NCDR</div><div className="font-semibold">{ncdrFinal ? <span className="text-green-700">✅ POSITIVE</span> : <span className="text-red-700">❌ NEGATIVE</span>}</div></div>
-                  </div>
-                </div>
-
-                {/* ACR */}
-                <div className="p-2 border rounded bg-gray-50">
-                  <div className="flex justify-between">
-                    <div>
-                      <h4 className="font-semibold text-gray-900">ACR</h4>
-                      <div className="text-xs text-gray-600">Increase in SCr ≥0.5 mg/dL OR ≥25% within 48–72h</div>
-                    </div>
-                    <div className="text-sm">{acrFinal ? <span className="text-green-700 font-semibold">✅</span> : <span className="text-red-700 font-semibold">❌</span>}</div>
-                  </div>
-
-                  <div className="mt-2 text-sm">
-                    <div className="flex justify-between"><div>Absolute Δ (0–72h)</div><div><strong>{b.absDiff72 ?? '—'} mg/dL</strong> — <Present ok={b.acr_abs ?? false} /></div></div>
-                    <div className="flex justify-between mt-1"><div>Relative Δ % (0–72h)</div><div><strong>{b.relDiff72Pct ?? '—'} %</strong> — <Present ok={b.acr_rel ?? false} /></div></div>
-                    <div className="mt-2 flex justify-between"><div className="font-semibold">Final ACR</div><div className="font-semibold">{acrFinal ? <span className="text-green-700">✅ POSITIVE</span> : <span className="text-red-700">❌ NEGATIVE</span>}</div></div>
-                  </div>
-                </div>
-
-              </div>
-            </div>
-          </div>
-        );
-      })}
+            );
+          })}
+        </div>
+      </div>
 
       {procBlocks.length > 0 && (
-        <div className="w-full max-w-6xl mt-2 mb-8">
+        <div className="w-full max-w-6xl mt-4 mb-8">
           <button
             onClick={saveAll}
             disabled={!patient || saving}
