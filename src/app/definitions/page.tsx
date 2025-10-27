@@ -49,22 +49,13 @@ type CinRow = {
 // ---------- Helpers ----------
 const fmtDate = (d: Date) => d.toISOString().slice(0, 10);
 const HOURS = 1000 * 60 * 60;
-const MS = 1000;
-
-function toTimestamp(rowDate?: string | null, fallbackTime = 'T00:00:00') {
-  if (!rowDate) return null;
-  // if rowDate looks like an ISO timestamp -> use as is
-  if (rowDate.includes('T')) return new Date(rowDate).getTime();
-  // otherwise treat as date-only
-  return new Date(rowDate + fallbackTime).getTime();
-}
 
 function clamp(n: number | null | undefined) {
   if (n === null || n === undefined || Number.isNaN(n)) return null;
   return Number(n);
 }
 
-// classify timing label used elsewhere if needed (kept for consistent UI)
+// classify timing label used in other pages (kept for consistent UI if needed)
 function classifyTimingLabel(dateISO: string, procISO: string | null, tag: 'CAG' | 'PTCA') {
   if (!procISO) return null;
   const sel = new Date(dateISO + 'T00:00:00');
@@ -167,15 +158,20 @@ export default function DefinitionsPage() {
   }, []);
 
   // Utilities to convert lab/fluid row -> timestamp (ms)
+  // IMPORTANT: prefer lab_date/fluid_date (the actual sample date) over created_at (DB insert time).
   function rowTimestampLab(l: LabRow) {
-    // prefer created_at if present
+    if (l.lab_date) {
+      // use midday to avoid timezone edgecases and to ensure same-day comparisons include that day
+      return new Date(l.lab_date + 'T12:00:00').getTime();
+    }
     if (l.created_at) return new Date(l.created_at).getTime();
-    if (l.lab_date) return new Date(l.lab_date + 'T00:00:00').getTime();
     return null;
   }
   function rowTimestampFluid(f: FluidRow) {
+    if (f.fluid_date) {
+      return new Date(f.fluid_date + 'T12:00:00').getTime();
+    }
     if (f.inserted_at) return new Date(f.inserted_at).getTime();
-    if (f.fluid_date) return new Date(f.fluid_date + 'T00:00:00').getTime();
     return null;
   }
 
@@ -184,49 +180,48 @@ export default function DefinitionsPage() {
     const procTs = new Date(procISO).getTime();
 
     // baseline selection:
-    // For CAG: baseline = latest lab strictly before procTs
-    // For PTCA: if another procedure exists (CAG) and PTCA within 24h of CAG -> use pre-CAG baseline
-    // else baseline = latest lab strictly before PTCA time
+    // For CAG: baseline = latest lab at or before procTs
+    // For PTCA: if other procedure exists and within 24h -> baseline before earliest procedure (<= earliest),
+    // otherwise baseline = latest lab at or before PTCA time
     let baselineLab: LabRow | null = null;
 
     if (procTag === 'PTCA' && otherProcISO) {
-      // if PTCA and there's CAG -> check gap
       const otherTs = new Date(otherProcISO).getTime();
       const deltaHours = Math.abs(procTs - otherTs) / HOURS;
       if (deltaHours <= 24) {
-        // treat baseline as latest lab before earliest procedure (i.e., pre-CAG)
+        // staged within 24h — baseline before the earliest procedure time (allow equal)
         const earliestTs = Math.min(procTs, otherTs);
-        const beforeLab = labs.filter(l => {
-          const t = rowTimestampLab(l);
-          return t !== null && t < earliestTs && l.scr != null;
-        }).sort((a,b) => (rowTimestampLab(b) || 0) - (rowTimestampLab(a) || 0))[0];
+        const beforeLab = labs
+          .map(l => ({ ...l, ts: rowTimestampLab(l) }))
+          .filter(l => l.ts !== null && (l.ts as number) <= earliestTs && l.scr != null)
+          .sort((a, b) => (b.ts || 0) - (a.ts || 0))[0];
         baselineLab = beforeLab || null;
       } else {
-        // staged >24h -> baseline before PTCA specifically
-        const beforeLab = labs.filter(l => {
-          const t = rowTimestampLab(l);
-          return t !== null && t < procTs && l.scr != null;
-        }).sort((a,b) => (rowTimestampLab(b) || 0) - (rowTimestampLab(a) || 0))[0];
+        // PTCA >24h later — baseline before PTCA specifically
+        const beforeLab = labs
+          .map(l => ({ ...l, ts: rowTimestampLab(l) }))
+          .filter(l => l.ts !== null && (l.ts as number) <= procTs && l.scr != null)
+          .sort((a, b) => (b.ts || 0) - (a.ts || 0))[0];
         baselineLab = beforeLab || null;
       }
     } else {
-      // default: baseline = latest lab before procTs
-      const beforeLab = labs.filter(l => {
-        const t = rowTimestampLab(l);
-        return t !== null && t < procTs && l.scr != null;
-      }).sort((a,b) => (rowTimestampLab(b) || 0) - (rowTimestampLab(a) || 0))[0];
+      // default: baseline = latest lab at or before procTs
+      const beforeLab = labs
+        .map(l => ({ ...l, ts: rowTimestampLab(l) }))
+        .filter(l => l.ts !== null && (l.ts as number) <= procTs && l.scr != null)
+        .sort((a, b) => (b.ts || 0) - (a.ts || 0))[0];
       baselineLab = beforeLab || null;
     }
 
     const baselineScr = baselineLab?.scr ?? null;
 
-    // helper to get peak SCr inside [startHours, endHours) after procTs
+    // helper to get peak SCr inside inclusive [startHours, endHours] after procTs
     function peakScrInWindow(startHours: number, endHours: number) {
       const start = procTs + startHours * HOURS;
       const end = procTs + endHours * HOURS;
       const scrs = labs
         .map(l => ({ ...l, ts: rowTimestampLab(l) }))
-        .filter(l => l.ts !== null && l.scr != null && l.ts > start && l.ts <= end)
+        .filter(l => l.ts !== null && l.scr != null && (l.ts as number) >= start && (l.ts as number) <= end)
         .map(l => Number(l.scr));
       if (scrs.length === 0) return null;
       return Math.max(...scrs);
@@ -236,37 +231,38 @@ export default function DefinitionsPage() {
     const peak0_24 = peakScrInWindow(0, 24);
     const peak24_48 = peakScrInWindow(24, 48);
     const peak48_72 = peakScrInWindow(48, 72);
-    // peak within 0-48 and 0-72 and 0-7d
-    const peak0_48 = [peak0_24, peak24_48].filter(x=>x!=null) as number[];
-    const peak0_48_val = peak0_48.length ? Math.max(...peak0_48) : null;
-    const peak0_72 = [peak0_24, peak24_48, peak48_72].filter(x=>x!=null) as number[];
-    const peak0_72_val = peak0_72.length ? Math.max(...peak0_72) : null;
 
-    // 7-day peak (use labs within 7*24h)
+    // peak within 0-48 and 0-72
+    const peak0_48_val = [peak0_24, peak24_48].filter(x => x != null) as number[];
+    const peak0_48 = peak0_48_val.length ? Math.max(...peak0_48_val) : null;
+    const peak0_72_val = [peak0_24, peak24_48, peak48_72].filter(x => x != null) as number[];
+    const peak0_72 = peak0_72_val.length ? Math.max(...peak0_72_val) : null;
+
+    // 7-day peak (inclusive)
     const start7 = procTs;
     const end7 = procTs + 7 * 24 * HOURS;
     const scrs7 = labs
       .map(l => ({ ...l, ts: rowTimestampLab(l) }))
-      .filter(l => l.ts !== null && l.scr != null && l.ts > start7 && l.ts <= end7)
+      .filter(l => l.ts !== null && l.scr != null && (l.ts as number) >= start7 && (l.ts as number) <= end7)
       .map(l => Number(l.scr));
-    const peak0_7_val = scrs7.length ? Math.max(...scrs7) : peak0_72_val; // fallback if none
+    const peak0_7_val = scrs7.length ? Math.max(...scrs7) : peak0_72; // fallback to 72h peak if none inside 7d
 
-    // absolute and relative diffs (48h uses peak within 0-48h, 72h uses 0-72h)
-    const absDiff48 = baselineScr != null && peak0_48_val != null ? Number((peak0_48_val - baselineScr).toFixed(3)) : null;
-    const relDiff48Pct = baselineScr != null && peak0_48_val != null && baselineScr !== 0 ? Number(((peak0_48_val - baselineScr) / baselineScr * 100).toFixed(2)) : null;
+    // absolute and relative diffs
+    const absDiff48 = baselineScr != null && peak0_48 != null ? Number((peak0_48 - baselineScr).toFixed(3)) : null;
+    const relDiff48Pct = baselineScr != null && peak0_48 != null && baselineScr !== 0 ? Number(((peak0_48 - baselineScr) / baselineScr * 100).toFixed(2)) : null;
 
-    const absDiff72 = baselineScr != null && peak0_72_val != null ? Number((peak0_72_val - baselineScr).toFixed(3)) : null;
-    const relDiff72Pct = baselineScr != null && peak0_72_val != null && baselineScr !== 0 ? Number(((peak0_72_val - baselineScr) / baselineScr * 100).toFixed(2)) : null;
+    const absDiff72 = baselineScr != null && peak0_72 != null ? Number((peak0_72 - baselineScr).toFixed(3)) : null;
+    const relDiff72Pct = baselineScr != null && peak0_72 != null && baselineScr !== 0 ? Number(((peak0_72 - baselineScr) / baselineScr * 100).toFixed(2)) : null;
 
     const absDiff7 = baselineScr != null && peak0_7_val != null ? Number((peak0_7_val - baselineScr).toFixed(3)) : null;
     const relDiff7Pct = baselineScr != null && peak0_7_val != null && baselineScr !== 0 ? Number(((peak0_7_val - baselineScr) / baselineScr * 100).toFixed(2)) : null;
 
-    // URINE: sum fluid output within (0,24] hours after proc
+    // URINE: sum fluid output within inclusive [0,24] hours after proc
     const startUrine = procTs;
     const endUrine = procTs + 24 * HOURS;
     const urineEntries = fluids
       .map(f => ({ ...f, ts: rowTimestampFluid(f) }))
-      .filter(f => f.ts !== null && f.output_ml != null && f.ts > startUrine && f.ts <= endUrine);
+      .filter(f => f.ts !== null && f.output_ml != null && (f.ts as number) >= startUrine && (f.ts as number) <= endUrine);
     const urineTotal = urineEntries.reduce((s, x) => s + (x.output_ml ?? 0), 0);
     // assume 70 kg -> threshold = 0.5 * 70 * 24 = 840 mL / 24h
     const urineThreshold = 0.5 * 70 * 24; // 840
@@ -274,24 +270,26 @@ export default function DefinitionsPage() {
 
     // KDIGO criteria
     const kdigo_abs48 = absDiff48 !== null && absDiff48 >= 0.3;
-    // KDIGO relative: prefer 7-day relative, else use 72h (we'll use relDiff7Pct)
-    const kdigo_rel = relDiff7Pct !== null && relDiff7Pct >= 50; // 1.5x baseline = 50% increase
-    const kdigo_urine = urineTotal > -1 && urineOutputLowAuto; // boolean
+    // KDIGO relative (>=1.5x baseline => >=50% increase)
+    const kdigo_rel = relDiff7Pct !== null && relDiff7Pct >= 50;
+    const kdigo_urine = urineOutputLowAuto;
 
-    // ESUR: abs >= 0.5 or rel >= 25% in 48-72h (we will use peak0_72_val and relDiff72Pct)
+    // ESUR: abs >= 0.5 or rel >= 25% in 48-72h (use 0-72h peak)
     const esur_abs = absDiff72 !== null && absDiff72 >= 0.5;
     const esur_rel = relDiff72Pct !== null && relDiff72Pct >= 25;
     const esur_result = esur_abs || esur_rel;
 
-    // NCDR: abs >= 0.3 OR rel >= 50 within 48h OR dialysis (dialysis manual)
+    // NCDR: abs >= 0.3 OR rel >= 50 within 48h (we'll evaluate using 0-48h)
     const ncdr_abs = absDiff48 !== null && absDiff48 >= 0.3;
     const ncdr_rel = relDiff48Pct !== null && relDiff48Pct >= 50;
-    // ACR: same as ESUR
+
+    // ACR (same as ESUR)
     const acr_abs = absDiff72 !== null && absDiff72 >= 0.5;
     const acr_rel = relDiff72Pct !== null && relDiff72Pct >= 25;
     const acr_result = acr_abs || acr_rel;
-    // FIX: define peakForStage to use later
-const peakForStage = peak0_7_val ?? null;
+
+    // peakForStage used for KDIGO staging decisions (prefer 7d peak)
+    const peakForStage = peak0_7_val ?? null;
 
     return {
       procTag,
@@ -301,8 +299,8 @@ const peakForStage = peak0_7_val ?? null;
       peak0_24,
       peak24_48,
       peak48_72,
-      peak0_48_val,
-      peak0_72_val,
+      peak0_48,
+      peak0_72,
       peak0_7_val,
       absDiff48,
       relDiff48Pct,
@@ -358,12 +356,11 @@ const peakForStage = peak0_7_val ?? null;
     for (const b of procBlocks) {
       const found = cinRows.find(c => c.procedure_type === b.procTag);
       newDial[b.procTag] = !!found?.dialysis_initiated;
-      // if saved urine flag exists, set override to that value (so clinician can change)
       newUrine[b.procTag] = (found?.urine_output_low ?? null);
     }
     setLocalDialysis(prev => ({ ...newDial, ...prev }));
     setLocalUrineOverride(prev => ({ ...newUrine, ...prev }));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cinRows, procBlocks.length]);
 
   // Save (upsert) function
@@ -414,8 +411,7 @@ const peakForStage = peak0_7_val ?? null;
       }
 
       if (toUpsert.length > 0) {
-        // upsert by patient_id and procedure_type (your DB has unique constraint on these)
-        const { error, data } = await supabase
+        const { error } = await supabase
           .from('cin_definitions')
           .upsert(toUpsert, { onConflict: 'patient_id,procedure_type' })
           .select('*');
@@ -446,14 +442,14 @@ const peakForStage = peak0_7_val ?? null;
 
   // Render small status item
   function Present({ ok }: { ok: boolean | null }) {
-    if (ok === null) return <span className="text-gray-500">—</span>;
-    return ok ? <span className="text-green-600 font-semibold">✅ Present</span> : <span className="text-red-600 font-semibold">❌ Absent</span>;
+    if (ok === null) return <span className="text-gray-700">—</span>;
+    return ok ? <span className="text-green-700 font-semibold">✅ Present</span> : <span className="text-red-700 font-semibold">❌ Absent</span>;
   }
 
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-100 p-6 flex items-center justify-center">
-        <div className="text-gray-700">Loading…</div>
+        <div className="text-gray-800">Loading…</div>
       </div>
     );
   }
@@ -494,7 +490,6 @@ const peakForStage = peak0_7_val ?? null;
 
             // KDIGO stage
             let kdigoStage: string | null = existing?.kdigo_stage ?? null;
-            // if not set derive
             if (!kdigoStage) {
               if (dialysisVal) kdigoStage = 'Stage 3';
               else if (b.peakForStage != null && b.baselineScr != null && b.baselineScr !== 0) {
@@ -510,19 +505,19 @@ const peakForStage = peak0_7_val ?? null;
               <div key={procTag} className="bg-white rounded shadow p-4">
                 <div className="flex items-center justify-between mb-3">
                   <h2 className="text-lg font-bold text-gray-900">📌 {procTag} — Definitions</h2>
-                  <div className="text-sm text-gray-600">Anchored at {new Date(b.procISO).toLocaleString()}</div>
+                  <div className="text-sm text-gray-800">Anchored at {new Date(b.procISO).toLocaleString()}</div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {/* Left: Data summary */}
                   <div className="p-3 border rounded">
                     <h3 className="font-semibold text-gray-900 mb-2">🔎 Data summary</h3>
-                    <div className="text-sm text-gray-700 space-y-1">
+                    <div className="text-sm text-gray-800 space-y-1">
                       <div><strong>Baseline SCr:</strong> {b.baselineScr ?? '—' } mg/dL {b.baselineLab ? `(on ${b.baselineLab.lab_date ?? b.baselineLab.created_at})` : ''}</div>
                       <div><strong>Peak 0-24 h:</strong> {b.peak0_24 ?? '—'} mg/dL</div>
                       <div><strong>Peak 24-48 h:</strong> {b.peak24_48 ?? '—'} mg/dL</div>
                       <div><strong>Peak 48-72 h:</strong> {b.peak48_72 ?? '—'} mg/dL</div>
-                      <div><strong>Peak (0-72 h):</strong> {b.peak0_72_val ?? '—'} mg/dL</div>
+                      <div><strong>Peak (0-72 h):</strong> {b.peak0_72 ?? '—'} mg/dL</div>
                       <div><strong>Peak (0-7 d):</strong> {b.peak0_7_val ?? '—'} mg/dL</div>
                       <div><strong>Urine output (0-24 h):</strong> {b.urineTotal ?? 0} mL (threshold {b.urineThreshold} mL)</div>
                     </div>
@@ -530,11 +525,11 @@ const peakForStage = peak0_7_val ?? null;
                     <div className="mt-3">
                       <label className="flex items-center gap-2">
                         <input type="checkbox" checked={dialysisVal} onChange={(e) => setLocalDialysis(prev => ({ ...prev, [procTag]: e.target.checked }))} />
-                        <span className="text-sm text-gray-800">Dialysis initiated (manual)</span>
+                        <span className="text-sm text-gray-900">Dialysis initiated (manual)</span>
                       </label>
                     </div>
 
-                    <div className="mt-2 text-xs text-gray-500">
+                    <div className="mt-2 text-xs text-gray-700">
                       <em>Urine threshold assumes weight = 70 kg — 0.5 mL/kg/hr = 840 mL / 24 h</em>
                     </div>
 
@@ -547,16 +542,16 @@ const peakForStage = peak0_7_val ?? null;
                             setLocalUrineOverride(prev => ({ ...prev, [procTag]: checked }));
                           }}
                         />
-                        <span className="text-sm text-gray-800">Mark urine_output_low = true (manual override)</span>
+                        <span className="text-sm text-gray-900">Mark urine_output_low = true (manual override)</span>
                       </label>
-                      <div className="text-xs text-gray-600 mt-1">Auto: {urineAuto ? 'LOW (< threshold)' : 'OK (≥ threshold)'}. Toggle above to override.</div>
+                      <div className="text-xs text-gray-700 mt-1">Auto: {urineAuto ? 'LOW (< threshold)' : 'OK (≥ threshold)'}. Toggle above to override.</div>
                     </div>
                   </div>
 
                   {/* Right: Definitions */}
                   <div className="p-3 border rounded space-y-3">
                     {/* baseline helper */}
-                    <div className="text-xs text-gray-600 mb-2">
+                    <div className="text-sm text-gray-800 mb-2">
                       <strong>Baseline labs used:</strong> {b.baselineLab ? `${b.baselineLab.scr ?? '—'} mg/dL on ${b.baselineLab.lab_date ?? b.baselineLab.created_at}` : 'No baseline lab found before procedure'}
                     </div>
 
@@ -565,25 +560,25 @@ const peakForStage = peak0_7_val ?? null;
                       <div className="flex justify-between items-center">
                         <div>
                           <h4 className="font-semibold text-gray-900">KDIGO (2012)</h4>
-                          <div className="text-xs text-gray-600">AKI if any: increase in SCr &gt;= 0.3 mg/dL (48h) OR 1.5 x baseline (7d) OR urine output &lt; 0.5 mL/kg/hr OR dialysis</div>
+                          <div className="text-sm text-gray-800">AKI if any: increase in SCr &gt;= 0.3 mg/dL (48h) OR 1.5 × baseline (7d) OR urine output &lt; 0.5 mL/kg/hr OR dialysis</div>
                         </div>
-                        <div className="text-sm">{kdigoStage ? <span className="px-2 py-1 rounded bg-yellow-100 text-yellow-800 font-semibold">{kdigoStage}</span> : <span className="text-gray-500">Stage: —</span>}</div>
+                        <div className="text-sm">{kdigoStage ? <span className="px-2 py-1 rounded bg-yellow-100 text-yellow-800 font-semibold">{kdigoStage}</span> : <span className="text-gray-700">Stage: —</span>}</div>
                       </div>
 
-                      <div className="mt-2 grid grid-cols-1 gap-1 text-sm">
+                      <div className="mt-2 grid grid-cols-1 gap-1 text-sm text-gray-800">
                         <div className="flex justify-between items-center">
                           <div>Absolute SCr rise &gt;= 0.3 mg/dL (48h)</div>
-                          <div className="text-right"><strong>{b.absDiff48 ?? '—'} mg/dL</strong> — <Present ok={b.kdigo_abs48 ?? false} /></div>
+                          <div className="text-right"><strong>{b.absDiff48 ?? '—'} mg/dL</strong> — <Present ok={!!b.kdigo_abs48} /></div>
                         </div>
 
                         <div className="flex justify-between items-center">
-                          <div>Relative SCr rise &gt;= 1.5 x baseline (7d)</div>
-                          <div className="text-right"><strong>{b.relDiff7Pct ?? '—'} %</strong> — <Present ok={b.kdigo_rel ?? false} /></div>
+                          <div>Relative SCr rise &gt;= 1.5 × baseline (7d)</div>
+                          <div className="text-right"><strong>{b.relDiff7Pct ?? '—'} %</strong> — <Present ok={!!b.kdigo_rel} /></div>
                         </div>
 
                         <div className="flex justify-between items-center">
-                          <div>Urine output low (0-24h) &lt; 840 mL</div>
-                          <div className="text-right"><strong>{b.urineTotal ?? 0} mL</strong> — <Present ok={urineFinal} /></div>
+                          <div>Urine output low (0-24h) &lt; {b.urineThreshold} mL</div>
+                          <div className="text-right"><strong>{b.urineTotal ?? 0} mL</strong> — <Present ok={!!urineFinal} /></div>
                         </div>
 
                         <div className="flex justify-between items-center">
@@ -603,14 +598,14 @@ const peakForStage = peak0_7_val ?? null;
                       <div className="flex justify-between">
                         <div>
                           <h4 className="font-semibold text-gray-900">ESUR (1999)</h4>
-                          <div className="text-xs text-gray-600">Increase in SCr &gt;= 0.5 mg/dL OR &gt;=25% within 48-72h</div>
+                          <div className="text-sm text-gray-800">Increase in SCr &gt;= 0.5 mg/dL OR &gt;=25% within 48-72h</div>
                         </div>
                         <div className="text-sm">{esurFinal ? <span className="text-green-700 font-semibold">✅</span> : <span className="text-red-700 font-semibold">❌</span>}</div>
                       </div>
 
-                      <div className="mt-2 text-sm">
-                        <div className="flex justify-between"><div>Absolute Δ (0-72h)</div><div><strong>{b.absDiff72 ?? '—'} mg/dL</strong> — <Present ok={b.esur_abs ?? false} /></div></div>
-                        <div className="flex justify-between mt-1"><div>Relative Δ % (0-72h)</div><div><strong>{b.relDiff72Pct ?? '—'} %</strong> — <Present ok={b.esur_rel ?? false} /></div></div>
+                      <div className="mt-2 text-sm text-gray-800">
+                        <div className="flex justify-between"><div>Absolute Δ (0-72h)</div><div><strong>{b.absDiff72 ?? '—'} mg/dL</strong> — <Present ok={!!b.esur_abs} /></div></div>
+                        <div className="flex justify-between mt-1"><div>Relative Δ % (0-72h)</div><div><strong>{b.relDiff72Pct ?? '—'} %</strong> — <Present ok={!!b.esur_rel} /></div></div>
                         <div className="mt-2 flex justify-between"><div className="font-semibold">Final ESUR</div><div className="font-semibold">{esurFinal ? <span className="text-green-700">✅ POSITIVE</span> : <span className="text-red-700">❌ NEGATIVE</span>}</div></div>
                       </div>
                     </div>
@@ -620,14 +615,14 @@ const peakForStage = peak0_7_val ?? null;
                       <div className="flex justify-between">
                         <div>
                           <h4 className="font-semibold text-gray-900">NCDR (CathPCI)</h4>
-                          <div className="text-xs text-gray-600">Increase in SCr &gt;= 0.3 mg/dL OR &gt;=50% within 48h OR dialysis</div>
+                          <div className="text-sm text-gray-800">Increase in SCr &gt;= 0.3 mg/dL OR &gt;=50% within 48h OR dialysis</div>
                         </div>
                         <div className="text-sm">{ncdrFinal ? <span className="text-green-700 font-semibold">✅</span> : <span className="text-red-700 font-semibold">❌</span>}</div>
                       </div>
 
-                      <div className="mt-2 text-sm">
-                        <div className="flex justify-between"><div>Absolute Δ (0-48h)</div><div><strong>{b.absDiff48 ?? '—'} mg/dL</strong> — <Present ok={b.ncdr_abs ?? false} /></div></div>
-                        <div className="flex justify-between mt-1"><div>Relative Δ % (0-48h)</div><div><strong>{b.relDiff48Pct ?? '—'} %</strong> — <Present ok={b.ncdr_rel ?? false} /></div></div>
+                      <div className="mt-2 text-sm text-gray-800">
+                        <div className="flex justify-between"><div>Absolute Δ (0-48h)</div><div><strong>{b.absDiff48 ?? '—'} mg/dL</strong> — <Present ok={!!b.ncdr_abs} /></div></div>
+                        <div className="flex justify-between mt-1"><div>Relative Δ % (0-48h)</div><div><strong>{b.relDiff48Pct ?? '—'} %</strong> — <Present ok={!!b.ncdr_rel} /></div></div>
                         <div className="mt-2 flex justify-between"><div className="font-semibold">Final NCDR</div><div className="font-semibold">{ncdrFinal ? <span className="text-green-700">✅ POSITIVE</span> : <span className="text-red-700">❌ NEGATIVE</span>}</div></div>
                       </div>
                     </div>
@@ -637,14 +632,14 @@ const peakForStage = peak0_7_val ?? null;
                       <div className="flex justify-between">
                         <div>
                           <h4 className="font-semibold text-gray-900">ACR</h4>
-                          <div className="text-xs text-gray-600">Increase in SCr &gt;= 0.5 mg/dL OR &gt;=25% within 48-72h</div>
+                          <div className="text-sm text-gray-800">Increase in SCr &gt;= 0.5 mg/dL OR &gt;=25% within 48-72h</div>
                         </div>
                         <div className="text-sm">{acrFinal ? <span className="text-green-700 font-semibold">✅</span> : <span className="text-red-700 font-semibold">❌</span>}</div>
                       </div>
 
-                      <div className="mt-2 text-sm">
-                        <div className="flex justify-between"><div>Absolute Δ (0-72h)</div><div><strong>{b.absDiff72 ?? '—'} mg/dL</strong> — <Present ok={b.acr_abs ?? false} /></div></div>
-                        <div className="flex justify-between mt-1"><div>Relative Δ % (0-72h)</div><div><strong>{b.relDiff72Pct ?? '—'} %</strong> — <Present ok={b.acr_rel ?? false} /></div></div>
+                      <div className="mt-2 text-sm text-gray-800">
+                        <div className="flex justify-between"><div>Absolute Δ (0-72h)</div><div><strong>{b.absDiff72 ?? '—'} mg/dL</strong> — <Present ok={!!b.acr_abs} /></div></div>
+                        <div className="flex justify-between mt-1"><div>Relative Δ % (0-72h)</div><div><strong>{b.relDiff72Pct ?? '—'} %</strong> — <Present ok={!!b.acr_rel} /></div></div>
                         <div className="mt-2 flex justify-between"><div className="font-semibold">Final ACR</div><div className="font-semibold">{acrFinal ? <span className="text-green-700">✅ POSITIVE</span> : <span className="text-red-700">❌ NEGATIVE</span>}</div></div>
                       </div>
                     </div>
