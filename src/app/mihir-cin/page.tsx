@@ -627,6 +627,14 @@ export default function MihirCinDefinition() {
     };
   }, [baselineMeta, scr24Meta, oliguriaCheck, contrastEgfr, hemodynamicInsult, bleedingCheck, confoundersAuto, manualConfounder, firstProcedure, urine24, egfrBaseline, contrastVolume]);
 
+  // ---------- Safe wrapper to avoid TS 'possibly undefined' in JSX ----------
+  // Keep as `any` to avoid changing logic; this only provides defaults for rendering.
+  const safeFinal: any = {
+    ...(finalResult ?? {}),
+    details: (finalResult?.details ?? {}),
+    supporting: (finalResult?.supporting ?? {})
+  };
+
   // ---------- Save function (insert or update) ----------
  // ---------- Save function (insert or update) ----------
 async function saveToSupabase() {
@@ -751,8 +759,8 @@ async function saveToSupabase() {
 
               <div><strong>Baseline SCr:</strong> {baselineMeta ? `${baselineMeta.value} mg/dL` + (baselineMeta.fallback ? ' (fallback date-only)' : '') : '—'}</div>
               <div><strong>0–24 h SCr:</strong> {scr24Meta ? `${scr24Meta.value} mg/dL` + (scr24Meta.fallback ? ' (fallback date-only)' : '') : '—'}</div>
-              <div><strong>ΔSCr (abs):</strong> {fmt(finalResult.absoluteDelta)} mg/dL</div>
-              <div><strong>ΔSCr (rel):</strong> {fmt(finalResult.relativeDelta)} ×</div>
+              <div><strong>ΔSCr (abs):</strong> {fmt(safeFinal.absoluteDelta)} mg/dL</div>
+              <div><strong>ΔSCr (rel):</strong> {fmt(safeFinal.relativeDelta)} ×</div>
 
               <div className="mt-2">
                 <strong>Urine (0–24 h):</strong>
@@ -762,35 +770,23 @@ async function saveToSupabase() {
               <div className="mt-2">
                 <strong>Contrast:</strong>
                <div className="text-sm ml-2">
-  Volume (earliest proc): {contrastVolume ?? '—'} mL — eGFR (baseline): {egfrBaseline ?? '—'} — ratio: {finalResult.details?.contrastEgfr?.ratio ?? '—'} {finalResult.supporting?.highContrast ? <span className="text-green-800 font-semibold"> (HIGH)</span> : ''}
+  Volume (earliest proc): {contrastVolume ?? '—'} mL — eGFR (baseline): {egfrBaseline ?? '—'} — ratio: {safeFinal.details?.contrastEgfr?.ratio ?? '—'} {safeFinal.supporting?.highContrast ? <span className="text-green-800 font-semibold"> (HIGH)</span> : ''}
 </div>
 
 
               <div className="mt-2">
                 <strong>Hemodynamics:</strong>
-                <div className="text-sm ml-2">MAP min (0–24): {finalResult.details?.hemodynamicInsult?.mapMin ?? '—'} — 
-Vasopressor in 0–24h: {finalResult.details?.hemodynamicInsult?.vasopressorFound ? 'Yes' : 'No'} — 
-<span className={finalResult.supporting?.hemo ? 'text-green-800 font-semibold' : 'text-gray-900'}>
-  {finalResult.supporting?.hemo ? 'INSULT' : 'OK'}
-</span>
-</div>
+                <div className="text-sm ml-2">MAP min (0–24): {safeFinal.details?.hemodynamicInsult?.mapMin ?? '—'} — Vasopressor in 0–24h: {safeFinal.details?.hemodynamicInsult?.vasopressorFound ? 'Yes' : 'No'} — <span className={safeFinal.supporting?.hemo ? 'text-green-800 font-semibold' : 'text-gray-900'}>{safeFinal.supporting?.hemo ? 'INSULT' : 'OK'}</span></div>
               </div>
 
-              <div className="text-sm ml-2">
-  Baseline Hb: {finalResult.details?.bleedingCheck?.baselineHb ?? '—'} — 
-  0–24 Hb: {finalResult.details?.bleedingCheck?.hb24 ?? '—'} — 
-  Drop: {finalResult.details?.bleedingCheck?.drop ?? '—'} 
-  {finalResult.supporting?.bleed ? (
-    <span className="text-green-800 font-semibold"> (MAJOR)</span>
-  ) : (
-    ''
-  )}
-</div>
-
+              <div className="mt-2">
+                <strong>Bleeding:</strong>
+                <div className="text-sm ml-2">Baseline Hb: {safeFinal.details?.bleedingCheck?.baselineHb ?? '—'} — 0–24 Hb: {safeFinal.details?.bleedingCheck?.hb24 ?? '—'} — Drop: {safeFinal.details?.bleedingCheck?.drop ?? '—'} {safeFinal.supporting?.bleed ? <span className="text-green-800 font-semibold"> (MAJOR)</span> : ''}</div>
+              </div>
 
               <div className="mt-2">
                 <strong>Auto confounders:</strong>
-                <div className="text-sm ml-2">Nephrotoxins in 0–24h: {finalResult.details.confoundersAuto.nephrotoxins ? 'Yes' : 'No'} — Repeat contrast in 72h: {finalResult.details.confoundersAuto.repeatContrast ? 'Yes' : 'No'}</div>
+                <div className="text-sm ml-2">Nephrotoxins in 0–24h: {safeFinal.details?.confoundersAuto?.nephrotoxins ? 'Yes' : 'No'} — Repeat contrast in 72h: {safeFinal.details?.confoundersAuto?.repeatContrast ? 'Yes' : 'No'}</div>
               </div>
 
             </div>
@@ -803,18 +799,18 @@ Vasopressor in 0–24h: {finalResult.details?.hemodynamicInsult?.vasopressorFoun
             <div className="text-sm space-y-2">
               <div className="flex items-center gap-2">
                 <div><strong>Auto CIN flag:</strong></div>
-                <div className={finalResult.mihir_flag ? 'text-green-800 font-semibold' : 'text-red-800 font-semibold'}>{finalResult.mihir_flag ? 'POSITIVE' : 'NEGATIVE'}</div>
+                <div className={safeFinal.mihir_flag ? 'text-green-800 font-semibold' : 'text-red-800 font-semibold'}>{safeFinal.mihir_flag ? 'POSITIVE' : 'NEGATIVE'}</div>
               </div>
 
-              <div><strong>Category:</strong> <span className="font-semibold">{finalResult.category}</span></div>
+              <div><strong>Category:</strong> <span className="font-semibold">{safeFinal.category}</span></div>
 
               <div className="mt-2">
                 <strong>Supporting flags:</strong>
                 <div className="mt-1 space-y-1 text-sm">
-                  <div>Oliguria: <span className={finalResult.supporting.olig ? 'text-green-800 font-semibold' : 'text-gray-900'}>{finalResult.supporting.olig ? 'YES' : 'NO'}</span></div>
-                  <div>High contrast burden: <span className={finalResult.supporting.highContrast ? 'text-green-800 font-semibold' : 'text-gray-900'}>{finalResult.supporting.highContrast ? 'YES' : 'NO'}</span></div>
-                  <div>Hemodynamic insult: <span className={finalResult.supporting.hemo ? 'text-green-800 font-semibold' : 'text-gray-900'}>{finalResult.supporting.hemo ? 'YES' : 'NO'}</span></div>
-                  <div>Major bleeding: <span className={finalResult.supporting.bleed ? 'text-green-800 font-semibold' : 'text-gray-900'}>{finalResult.supporting.bleed ? 'YES' : 'NO'}</span></div>
+                  <div>Oliguria: <span className={safeFinal.supporting?.olig ? 'text-green-800 font-semibold' : 'text-gray-900'}>{safeFinal.supporting?.olig ? 'YES' : 'NO'}</span></div>
+                  <div>High contrast burden: <span className={safeFinal.supporting?.highContrast ? 'text-green-800 font-semibold' : 'text-gray-900'}>{safeFinal.supporting?.highContrast ? 'YES' : 'NO'}</span></div>
+                  <div>Hemodynamic insult: <span className={safeFinal.supporting?.hemo ? 'text-green-800 font-semibold' : 'text-gray-900'}>{safeFinal.supporting?.hemo ? 'YES' : 'NO'}</span></div>
+                  <div>Major bleeding: <span className={safeFinal.supporting?.bleed ? 'text-green-800 font-semibold' : 'text-gray-900'}>{safeFinal.supporting?.bleed ? 'YES' : 'NO'}</span></div>
                 </div>
               </div>
 
@@ -860,10 +856,10 @@ Vasopressor in 0–24h: {finalResult.details?.hemodynamicInsult?.vasopressorFoun
             <div><strong>hemodynamicInsult:</strong> {JSON.stringify(hemodynamicInsult)}</div>
             <div><strong>bleedingCheck:</strong> {JSON.stringify(bleedingCheck)}</div>
             <div><strong>confoundersAuto:</strong> {JSON.stringify(confoundersAuto)}</div>
+            <div><strong>Final result (safe):</strong> {JSON.stringify(safeFinal)}</div>
           </div>
         </details>
       </div>  
     </div>  
-  </div> 
   );
 }
