@@ -4,16 +4,11 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
 /**
- * Complete, ready-to-paste page file.
- * - Pulls procedures from `procedures` table (datetime & type)
- * - Pulls labs from `lab_results`
- * - Pulls fluids from `fluid_chart`
- * - Uses `cin_definitions` for upsert
- * - Supports CAG / PTCA / POBA / other types; builds first/second/third exposures
- * - Baseline selection: latest lab <= first exposure, with a stability check (prior 7d)
- * - Windows anchored to last exposure: KDIGO 48h, KDIGO relative 7d, ESUR/ACR 72h, NCDR 48h
- * - Marks definitions not_assessable when window has no labs (except KDIGO urine/dialysis)
- * - NCDR only evaluated if PTCA exists in the episode
+ * CIN / AKI definitions page (ready-to-paste)
+ * - Uses procedures_view (SQL view) for procedures (datetime & type)
+ * - Pulls labs from lab_results, fluids from fluid_chart
+ * - Upserts to cin_definitions
+ * - Handles CAG / PTCA / POBA / TPI / THROMBUS_ASPIRATION etc.
  */
 
 // ---------- Supabase client ----------
@@ -32,14 +27,14 @@ type Patient = {
 type ProcedureRow = {
   id: string;
   patient_id: string;
-  type: 'CAG' | 'PTCA' | 'POBA' | string;
-  procedure_datetime: string | null; // ISO timestamp string
+  type: string; // 'CAG' | 'PTCA' | 'POBA' | 'TPI' | ...
+  procedure_datetime: string | null;
 };
 
 type LabRow = {
   id: string;
   patient_id?: string;
-  lab_date: string | null; // date or datetime
+  lab_date: string | null;
   scr?: number | null;
   created_at?: string | null;
 };
@@ -47,7 +42,7 @@ type LabRow = {
 type FluidRow = {
   id: string;
   patient_id?: string;
-  fluid_date: string | null;   // date or datetime
+  fluid_date: string | null;
   output_ml?: number | null;
   inserted_at?: string | null;
 };
@@ -55,7 +50,7 @@ type FluidRow = {
 type CinRow = {
   id?: string | null;
   patient_id: string;
-  procedure_type: string; // 'CAG' | 'PTCA' | 'FINAL' | ...
+  procedure_type: string;
   cin_kdigo?: boolean | null;
   kdigo_stage?: string | null;
   cin_esur?: boolean | null;
@@ -70,10 +65,9 @@ type CinRow = {
 const HOURS = 1000 * 60 * 60;
 const clamp = (n: number | null | undefined) => (n === null || n === undefined || Number.isNaN(n) ? null : Number(n));
 
-/** Prefer sample date (lab_date) over created_at. Use midday to avoid timezone midnight issues. */
 function rowTimestampLab(l: LabRow): number | null {
   if (l.lab_date) {
-    // if lab_date already contains time (T) this will still work
+    // accept iso datetime or date-only; use midday for date-only to avoid timezone midnight issues
     return new Date(l.lab_date.includes('T') ? l.lab_date : l.lab_date + 'T12:00:00').getTime();
   }
   if (l.created_at) return new Date(l.created_at).getTime();
@@ -88,14 +82,9 @@ function rowTimestampFluid(f: FluidRow): number | null {
   return null;
 }
 
-function formatDt(ts?: number | null) {
-  if (!ts) return '—';
-  return new Date(ts).toLocaleString();
-}
-
 function Present({ ok }: { ok: boolean | null }) {
   if (ok === null) return <span className="text-gray-700">—</span>;
-  return ok ? <span className="text-green-700 font-semibold">✅ Present</span> : <span className="text-red-700 font-semibold">❌ Absent</span>;
+  return ok ? <span className="text-green-700 font-semibold">✅</span> : <span className="text-red-700 font-semibold">❌</span>;
 }
 
 // ---------- Component ----------
@@ -108,16 +97,15 @@ export default function DefinitionsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  // UI overrides:
+  // UI overrides
   const [localDialysis, setLocalDialysis] = useState<Record<string, boolean>>({});
   const [localUrineOverride, setLocalUrineOverride] = useState<Record<string, boolean | null>>({});
 
-  // ---------- Load patient id via active_patient, then load data ----------
+  // Load data: active_patient -> patient_details -> procedures_view -> labs -> fluids -> cin_definitions
   useEffect(() => {
     (async () => {
       setLoading(true);
       try {
-        // YOUR app uses active_patient to indicate selected patient
         const { data: active } = await supabase
           .from('active_patient')
           .select('patient_id')
@@ -130,7 +118,7 @@ export default function DefinitionsPage() {
         }
         const patientId = active.patient_id;
 
-        // patient details
+        // patient
         const { data: p } = await supabase
           .from('patient_details')
           .select('id, patient_name, ipd_number')
@@ -138,9 +126,9 @@ export default function DefinitionsPage() {
           .single();
         if (p) setPatient(p);
 
-        // procedures: IMPORTANT — we fetch from procedures table so procedure datetime comes from procedures page
+        // procedures -> NOTE: uses procedures_view (SQL view you created)
         const { data: procData } = await supabase
-          .from('procedures')
+          .from('procedures_view')
           .select('id, patient_id, type, procedure_datetime')
           .eq('patient_id', patientId)
           .order('procedure_datetime', { ascending: true });
@@ -157,9 +145,7 @@ export default function DefinitionsPage() {
           .select('id, patient_id, lab_date, scr, created_at')
           .eq('patient_id', patientId)
           .order('lab_date', { ascending: true });
-        setLabs((labData || []).map((l: any) => ({
-          id: l.id, patient_id: l.patient_id, lab_date: l.lab_date, scr: clamp(l.scr), created_at: l.created_at
-        })));
+        setLabs((labData || []).map((l: any) => ({ id: l.id, patient_id: l.patient_id, lab_date: l.lab_date, scr: clamp(l.scr), created_at: l.created_at })));
 
         // fluids
         const { data: fluidData } = await supabase
@@ -167,11 +153,9 @@ export default function DefinitionsPage() {
           .select('id, patient_id, fluid_date, output_ml, inserted_at')
           .eq('patient_id', patientId)
           .order('fluid_date', { ascending: true });
-        setFluids((fluidData || []).map((f: any) => ({
-          id: f.id, patient_id: f.patient_id, fluid_date: f.fluid_date, output_ml: clamp(f.output_ml), inserted_at: f.inserted_at
-        })));
+        setFluids((fluidData || []).map((f: any) => ({ id: f.id, patient_id: f.patient_id, fluid_date: f.fluid_date, output_ml: clamp(f.output_ml), inserted_at: f.inserted_at })));
 
-        // existing CIN rows
+        // existing cin rows
         const { data: cinData } = await supabase
           .from('cin_definitions')
           .select('*')
@@ -185,33 +169,29 @@ export default function DefinitionsPage() {
     })();
   }, []);
 
-  // sync UI overrides from existing saved cinRows
+  // sync UI override values from saved cin rows
   useEffect(() => {
     const nd: Record<string, boolean> = {};
     const nu: Record<string, boolean | null> = {};
     for (const row of cinRows) {
-      nd[row.procedure_type] = !!row.dialysis_initiated;
-      nu[row.procedure_type] = row.urine_output_low ?? null;
+      if (row.procedure_type) nd[row.procedure_type] = !!row.dialysis_initiated;
+      if (row.procedure_type) nu[row.procedure_type] = row.urine_output_low ?? null;
     }
     setLocalDialysis(prev => ({ ...nd, ...prev }));
     setLocalUrineOverride(prev => ({ ...nu, ...prev }));
   }, [cinRows]);
 
-  // ---------- Build exposures timeline (first, second, third) ----------
+  // exposures timeline (sorted, filtering out null datetimes)
   const exposures = useMemo(() => {
-    // Use procedures fetched from procedures table; ignore any without datetime
-    const arr = procedures
+    return procedures
       .filter(p => p.procedure_datetime)
-      .map(p => ({ id: p.id, type: p.type as string, datetime: p.procedure_datetime as string }))
+      .map(p => ({ id: p.id, type: p.type, datetime: p.procedure_datetime as string }))
       .sort((a, b) => new Date(a.datetime).getTime() - new Date(b.datetime).getTime());
-    // normalize types (CAG, PTCA, POBA possible)
-    return arr;
   }, [procedures]);
 
-  // ---------- Baseline selection (single baseline for episode) ----------
+  // baseline: latest lab at or before first exposure (inclusive) + stability check
   const baseline = useMemo(() => {
-    if (!exposures.length) return null;
-    // pick latest lab at or before first exposure
+    if (!exposures.length || !labs.length) return null;
     const firstTs = new Date(exposures[0].datetime).getTime();
     const candidates = labs
       .map(l => ({ ...l, ts: rowTimestampLab(l) }))
@@ -219,32 +199,36 @@ export default function DefinitionsPage() {
       .sort((a, b) => (b.ts || 0) - (a.ts || 0));
     if (!candidates.length) return null;
     const chosen = candidates[0];
-    // baseline stability check: ensure creatinine was not rising by >=0.3 mg/dL or >=50% in prior 7 days
-    const sevenDaysBefore = (chosen.ts as number) - 7 * 24 * HOURS;
+    const chosenScr = Number(chosen.scr);
+    const chosenTs = chosen.ts as number;
+
+    // stability: check earlier labs in prior 7 days (if any). If earlierScr is zero -> ignore (avoid div-by-zero)
+    const sevenDaysBefore = chosenTs - 7 * 24 * HOURS;
     const earlier = labs
       .map(l => ({ ...l, ts: rowTimestampLab(l) }))
-      .filter(l => l.ts !== null && (l.ts as number) >= sevenDaysBefore && (l.ts as number) < (chosen.ts as number) && l.scr != null)
+      .filter(l => l.ts !== null && (l.ts as number) >= sevenDaysBefore && (l.ts as number) < chosenTs && l.scr != null)
       .sort((a, b) => (b.ts || 0) - (a.ts || 0));
     let stable = true;
     for (const e of earlier) {
-      // if chosen.scr rose from earlier by >=0.3 or >=50%, baseline is rising -> unstable
-      const diff = (chosen.scr as number) - (e.scr as number);
-      const pct = (chosen.scr as number) / (e.scr as number);
+      if (e.scr == null) continue;
+      const earlierScr = Number(e.scr);
+      if (earlierScr === 0) continue; // can't compute percent change, skip
+      const diff = chosenScr - earlierScr;
+      const pct = earlierScr > 0 ? chosenScr / earlierScr : 1;
       if (diff >= 0.3 || pct >= 1.5) {
         stable = false;
         break;
       }
     }
     return {
-      value: chosen.scr as number,
+      value: chosenScr,
       date: chosen.lab_date ?? chosen.created_at ?? null,
-      ts: chosen.ts as number,
+      ts: chosenTs,
       stable
     };
   }, [exposures, labs]);
 
-  // ---------- Compute CIN for a given anchor datetime (anchor = last exposure or per-exposure) ----------
-  // returns a typed result used to render UI and to upsert
+  // AnchorResult type for computeForAnchor
   type AnchorResult = {
     anchorISO: string;
     anchorType: string;
@@ -253,11 +237,10 @@ export default function DefinitionsPage() {
     baselineDate: string | null;
     baselineStable: boolean | null;
     peaks: {
-  peak_48?: { value: number; date: string | null | undefined } | null;
-  peak_72?: { value: number; date: string | null | undefined } | null;
-  peak_7d?: { value: number; date: string | null | undefined } | null;
-};
-    
+      peak_48?: { value: number; date: string | null } | null;
+      peak_72?: { value: number; date: string | null } | null;
+      peak_7d?: { value: number; date: string | null } | null;
+    };
     diffs: {
       abs48: number | null;
       rel48: number | null; // ratio (e.g., 1.444)
@@ -276,16 +259,14 @@ export default function DefinitionsPage() {
     ncdr: { status: 'positive' | 'negative' | 'not_assessable' };
   };
 
+  // compute for a given anchor datetime (anchor = exposure datetime or final episode anchor)
   function computeForAnchor(anchorISO: string, anchorType: string): AnchorResult {
     const procTs = new Date(anchorISO).getTime();
-
-    // always assume default weight 70 kg unless you add a weight field
     const weightKg = 70;
     const urineThreshold = 0.5 * weightKg * 24; // 840 mL / 24h
 
-    // if no baseline or baseline unstable -> we will mark some definitions not_assessable per spec
+    // baseline missing: many definitions not assessable; still compute urine if available
     if (!baseline) {
-      // compute urine total only (possible)
       const startU = procTs;
       const endU = procTs + 24 * HOURS;
       const urineEntries = fluids
@@ -315,7 +296,7 @@ export default function DefinitionsPage() {
       };
     }
 
-    // helper to collect labs in window [startHours, endHours] inclusive
+    // helper to get labs in inclusive [startHours, endHours]
     function labsInWindow(startHours: number, endHours: number) {
       const start = procTs + startHours * HOURS;
       const end = procTs + endHours * HOURS;
@@ -325,7 +306,6 @@ export default function DefinitionsPage() {
         .map(l => ({ value: Number(l.scr), date: l.lab_date ?? l.created_at }));
     }
 
-    // peaks
     const arr48 = labsInWindow(0, 48);
     const arr72 = labsInWindow(0, 72);
     const arr7d = labsInWindow(0, 7 * 24);
@@ -334,8 +314,8 @@ export default function DefinitionsPage() {
     const peak72 = arr72.length ? arr72.reduce((a, b) => (b.value > a.value ? b : a)) : null;
     const peak7d = arr7d.length ? arr7d.reduce((a, b) => (b.value > a.value ? b : a)) : null;
 
-    // diffs vs baseline
     const baseVal = baseline.value;
+
     const abs48 = peak48 ? Number((peak48.value - baseVal).toFixed(3)) : null;
     const rel48 = peak48 ? Number((peak48.value / baseVal).toFixed(3)) : null;
     const abs72 = peak72 ? Number((peak72.value - baseVal).toFixed(3)) : null;
@@ -343,7 +323,7 @@ export default function DefinitionsPage() {
     const abs7 = peak7d ? Number((peak7d.value - baseVal).toFixed(3)) : null;
     const rel7 = peak7d ? Number((peak7d.value / baseVal).toFixed(3)) : null;
 
-    // urine 0-24h after anchor
+    // urine 0-24h
     const startUrine = procTs;
     const endUrine = procTs + 24 * HOURS;
     const urineEntries = fluids
@@ -353,19 +333,15 @@ export default function DefinitionsPage() {
     const urineDataPresent = urineEntries.length > 0;
     const urineLowAuto = urineDataPresent ? urineTotal < urineThreshold : null;
 
-    // KDIGO:
-    // positive if:
-    // - abs48 >= 0.3 within 48h (need peak48)
-    // - rel7 >= 1.5 within 7d (need peak7d)
-    // - urineLowAuto === true
-    // KDIGO assessable: if any of the relevant windows have SCr or urine data present
+    // KDIGO logic
     const cond_abs48 = abs48 !== null && abs48 >= 0.3;
-    const cond_rel7 = rel7 !== null && rel7 >= 1.5;
+    const cond_rel7 = rel7 !== null && rel7 >= 1.5; // ratio >=1.5
     const kdigoHasScr = Boolean(peak48 || peak72 || peak7d);
-    const kdigoAssessable = kdigoHasScr || urineDataPresent || true; // we still can be negative if labs exist
+
     let kdigoStatus: AnchorResult['kdigo']['status'] = 'not_assessable';
     let kdigoVia: 'scr' | 'urine' | 'dialysis' | null = null;
     let kdigoStage: 1 | 2 | 3 | null = null;
+
     if (!kdigoHasScr && !urineDataPresent) {
       kdigoStatus = 'not_assessable';
     } else {
@@ -373,12 +349,12 @@ export default function DefinitionsPage() {
         kdigoStatus = 'positive';
         kdigoVia = cond_abs48 || cond_rel7 ? 'scr' : 'urine';
       } else {
-        // if any SCr exists in required windows or urine present -> we can call negative
+        // if any SCr exists in relevant windows or urine present -> negative (otherwise not_assessable)
         if (kdigoHasScr || urineDataPresent) kdigoStatus = 'negative';
         else kdigoStatus = 'not_assessable';
       }
 
-      // Stage: use peak across 7d > 72h > 48h
+      // Stage: prefer 7d peak then 72h then 48h
       const peakForStage = peak7d?.value ?? peak72?.value ?? peak48?.value ?? null;
       if (peakForStage !== null) {
         const ratio = peakForStage / baseVal;
@@ -389,18 +365,18 @@ export default function DefinitionsPage() {
       }
     }
 
-    // ESUR / ACR: window 0-72h, positive if abs >= 0.5 OR rel >= 1.25
+    // ESUR / ACR (0-72h): abs >=0.5 or rel >=1.25
     let esurStatus: AnchorResult['esur']['status'] = 'not_assessable';
     if (peak72) {
       const condA = abs72 !== null && abs72 >= 0.5;
-      const condB = rel72 !== null && rel72 >= 1.25; // 1.25x = 25% increase
+      const condB = rel72 !== null && rel72 >= 1.25;
       esurStatus = (condA || condB) ? 'positive' : 'negative';
     } else {
       esurStatus = 'not_assessable';
     }
     const acrStatus = esurStatus;
 
-    // NCDR: window 0-48h: abs >= 0.3 OR rel >= 1.5 OR dialysis
+    // NCDR (0-48h): abs >=0.3 or rel >=1.5 (dialysis handled when combining UI overrides)
     let ncdrStatus: AnchorResult['ncdr']['status'] = 'not_assessable';
     if (peak48) {
       const condA = abs48 !== null && abs48 >= 0.3;
@@ -434,60 +410,51 @@ export default function DefinitionsPage() {
     };
   }
 
-  // ---------- Build per-exposure results + FINAL episode (anchored to last exposure) ----------
+  // Build per-exposure results + FINAL
   const results = useMemo(() => {
     if (!exposures.length) return null;
-    const base = baseline;
     const list: { label: string; type: string; datetime: string; result: AnchorResult }[] = [];
-    // per exposure (1..N)
     exposures.forEach((ex, idx) => {
       const res = computeForAnchor(ex.datetime, ex.type);
       list.push({ label: `Exposure ${idx + 1} (${ex.type})`, type: ex.type, datetime: ex.datetime, result: res });
     });
-    // FINAL episode anchored to last exposure
     const last = exposures[exposures.length - 1];
     const finalRes = computeForAnchor(last.datetime, 'FINAL');
     list.push({ label: 'FINAL (episode)', type: 'FINAL', datetime: last.datetime, result: finalRes });
-
     return {
-      base,
+      base: baseline,
       list,
       hasPTCA: exposures.some(e => e.type === 'PTCA')
     };
   }, [exposures, labs, fluids, baseline]);
 
-  // ---------- Save / Upsert function ----------
+  // Save / upsert per user request
   async function saveAll() {
     if (!patient || !results) return;
     setSaving(true);
     try {
       const toUpsert: CinRow[] = [];
       for (const item of results.list) {
-        // only store rows for CAG / PTCA / FINAL
-        if (!['CAG', 'PTCA', 'FINAL', 'POBA'].includes(item.type)) continue;
-        const storedType = item.type; // string
+        // store common types: CAG, PTCA, POBA, FINAL
+        if (!['CAG', 'PTCA', 'POBA', 'FINAL'].includes(item.type)) continue;
+        const storedType = item.type;
 
-        // existing
         const existing = cinRows.find(c => c.procedure_type === storedType);
 
-        // pick UI overrides or auto
+        // overrides & flags
         const dialysisFlag = !!localDialysis[storedType];
         const urineOverride = localUrineOverride[storedType];
-        // default urine auto comes from result.urineLowAuto (true/false/null)
         const urineAuto = item.result.urineLowAuto === null ? null : !!item.result.urineLowAuto;
         const urineFlag = urineOverride === null || urineOverride === undefined ? !!urineAuto : !!urineOverride;
 
-        // KDIGO combine SCr/urine/dialysis
         const kdigoPos = item.result.kdigo.status === 'positive' || dialysisFlag;
 
-        // NCDR only stored if PTCA present in episode
+        // NCDR only if any PTCA in episode and storing PTCA or FINAL (user requirement)
         let ncdrFlag = false;
         if (results.hasPTCA) {
           if (storedType === 'PTCA' || storedType === 'FINAL') {
             ncdrFlag = item.result.ncdr.status === 'positive' || dialysisFlag;
-          } else {
-            ncdrFlag = false;
-          }
+          } else ncdrFlag = false;
         } else {
           ncdrFlag = false;
         }
@@ -508,13 +475,12 @@ export default function DefinitionsPage() {
         toUpsert.push(row);
       }
 
-      if (toUpsert.length === 0) {
+      if (!toUpsert.length) {
         alert('Nothing to save');
         setSaving(false);
         return;
       }
 
-      // upsert by patient_id,procedure_type unique constraint
       const { error } = await supabase
         .from('cin_definitions')
         .upsert(toUpsert, { onConflict: 'patient_id,procedure_type' });
@@ -523,7 +489,6 @@ export default function DefinitionsPage() {
         console.error('upsert error', error);
         alert('Save failed — check console');
       } else {
-        // reload cin_rows
         const { data: fresh } = await supabase
           .from('cin_definitions')
           .select('*')
@@ -539,7 +504,7 @@ export default function DefinitionsPage() {
     }
   }
 
-  // ---------- UI ----------
+  // ---------- RENDER ----------
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-100 p-6 flex items-center justify-center">
@@ -557,7 +522,7 @@ export default function DefinitionsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-5 flex flex-col items-center">
+    <div className="min-h-screen bg-gray-50 p-6 flex flex-col items-center">
       <h1 className="text-3xl font-extrabold mb-4 text-gray-900">🧾 CIN / AKI Definitions</h1>
 
       <div className="w-full max-w-6xl bg-white rounded shadow p-3 mb-4 text-gray-900">
@@ -565,7 +530,7 @@ export default function DefinitionsPage() {
       </div>
 
       {!exposures.length && (
-        <div className="w-full max-w-6xl bg-white rounded shadow p-4 text-gray-900">No procedures found for this patient. Please add procedures (CAG / PTCA / POBA).</div>
+        <div className="w-full max-w-6xl bg-white rounded shadow p-4 text-gray-900">No procedures found for this patient. Add procedures on the procedures page (view: procedures_view).</div>
       )}
 
       {results && exposures.length > 0 && (
@@ -573,10 +538,10 @@ export default function DefinitionsPage() {
           <div className="flex justify-between items-start">
             <div>
               <h2 className="text-lg font-bold text-gray-900">Episode summary</h2>
-              <div className="text-sm text-gray-800 mt-1">
+              <div className="text-sm text-gray-900 mt-1">
                 <div><strong>Exposures:</strong> {exposures.map((e, i) => `${i + 1}. ${e.type} (${new Date(e.datetime).toLocaleString()})`).join(' — ')}</div>
                 <div className="mt-1"><strong>Baseline used:</strong> {results.base ? `${results.base.value} mg/dL on ${results.base.date}${results.base.stable ? '' : ' (UNSTABLE)'}` : <span className="text-red-700">No baseline — definitions not assessable</span>}</div>
-                <div className="mt-1 text-xs text-gray-600">Baseline = latest SCr measured on or before the first exposure. If baseline is unstable (rising in prior 7d), definitions may be invalid.</div>
+                <div className="mt-1 text-xs text-gray-600">Baseline = latest serum creatinine measured on or before the <strong>first</strong> exposure. If rising in prior 7d, baseline is marked unstable.</div>
               </div>
             </div>
 
@@ -621,7 +586,7 @@ export default function DefinitionsPage() {
         </div>
       )}
 
-      {/* Per-exposure cards */}
+      {/* Per-exposure cards (grid: side-by-side on large screens) */}
       <div className="w-full max-w-6xl space-y-6">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {results?.list.map(it => {
@@ -632,7 +597,6 @@ export default function DefinitionsPage() {
             const urineAuto = r.urineLowAuto === null ? null : !!r.urineLowAuto;
             const urineFinal = urineOverride === null || urineOverride === undefined ? urineAuto : urineOverride;
 
-            // final flags (dialysis manual overrides KDIGO stage)
             const kdigoFinal = r.kdigo.status === 'positive' || dialysisVal;
             const esurFinal = r.esur.status === 'positive';
             const acrFinal = r.acr.status === 'positive';
@@ -650,8 +614,11 @@ export default function DefinitionsPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="p-3 border rounded">
                     <h4 className="font-semibold text-gray-900 mb-2">Data summary</h4>
-                    <div className="text-sm text-gray-800 space-y-1">
-                      <div><strong>Baseline SCr:</strong> {results.base ? `${results.base.value} mg/dL${results.base.stable ? '' : ' (UNSTABLE)'}` : <span className="text-red-700">No baseline</span>} {results.base?.date ? `(on ${results.base.date})` : ''}</div>
+                    <div className="text-sm text-gray-900 space-y-1">
+                      <div>
+                        <strong>Baseline SCr:</strong> {results.base ? `${results.base.value} mg/dL${results.base.stable ? '' : ' (UNSTABLE)'}` : <span className="text-red-700">No baseline</span>}
+                        {results.base?.date ? ` (on ${results.base.date})` : ''}
+                      </div>
 
                       <div><strong>Peak (0–48 h):</strong> {r.peaks.peak_48 ? `${r.peaks.peak_48.value} mg/dL` : '—'}</div>
                       <div><strong>Peak (0–72 h):</strong> {r.peaks.peak_72 ? `${r.peaks.peak_72.value} mg/dL` : '—'}</div>
@@ -687,19 +654,19 @@ export default function DefinitionsPage() {
                   </div>
 
                   <div className="p-3 border rounded space-y-3">
-                    <div className="text-sm text-gray-800 mb-1"><strong>Baseline used:</strong> {results.base ? `${results.base.value} mg/dL on ${results.base.date}` : 'No baseline found'}</div>
+                    <div className="text-sm text-gray-900 mb-1"><strong>Baseline used:</strong> {results.base ? `${results.base.value} mg/dL on ${results.base.date}` : 'No baseline found'}</div>
 
                     {/* KDIGO */}
                     <div className="p-2 border rounded bg-gray-50">
                       <div className="flex justify-between items-center">
                         <div>
                           <h4 className="font-semibold text-gray-900">KDIGO (2012)</h4>
-                          <div className="text-sm text-gray-800">AKI if any: ↑SCr ≥0.3 mg/dL (48h) OR ≥1.5× baseline (7d) OR urine output low OR dialysis</div>
+                          <div className="text-sm text-gray-900">AKI if any: ↑SCr ≥0.3 mg/dL (48h) OR ≥1.5× baseline (7d) OR urine output low OR dialysis</div>
                         </div>
                         <div className="text-sm">{kdigoStageShown ? <span className="px-2 py-1 rounded bg-yellow-100 text-yellow-800 font-semibold">{kdigoStageShown}</span> : <span className="text-gray-700">Stage: —</span>}</div>
                       </div>
 
-                      <div className="mt-2 text-sm text-gray-800 space-y-1">
+                      <div className="mt-2 text-sm text-gray-900 space-y-1">
                         <div className="flex justify-between"><div>Absolute Δ (0–48h)</div><div><strong>{r.diffs.abs48 ?? '—'} mg/dL</strong> — <Present ok={r.diffs.abs48 !== null ? (r.diffs.abs48 >= 0.3) : null} /></div></div>
 
                         <div className="flex justify-between"><div>Relative (0–7d)</div><div><strong>{r.diffs.rel7 ?? '—'} ×</strong> — <Present ok={r.diffs.rel7 !== null ? (r.diffs.rel7 >= 1.5) : null} /></div></div>
@@ -720,12 +687,12 @@ export default function DefinitionsPage() {
                       <div className="flex justify-between">
                         <div>
                           <h4 className="font-semibold text-gray-900">ESUR (1999)</h4>
-                          <div className="text-sm text-gray-800">Increase ≥0.5 mg/dL OR ≥25% within 48–72h</div>
+                          <div className="text-sm text-gray-900">Increase ≥0.5 mg/dL OR ≥25% within 48–72h</div>
                         </div>
                         <div className="text-sm">{esurFinal ? <span className="text-green-700 font-semibold">✅</span> : <span className="text-red-700 font-semibold">❌</span>}</div>
                       </div>
 
-                      <div className="mt-2 text-sm text-gray-800">
+                      <div className="mt-2 text-sm text-gray-900">
                         <div className="flex justify-between"><div>Absolute Δ (0–72h)</div><div><strong>{r.diffs.abs72 ?? '—'} mg/dL</strong> — <Present ok={r.diffs.abs72 !== null ? (r.diffs.abs72 >= 0.5) : null} /></div></div>
                         <div className="flex justify-between mt-1"><div>Relative (0–72h)</div><div><strong>{r.diffs.rel72 ?? '—'} ×</strong> — <Present ok={r.diffs.rel72 !== null ? (r.diffs.rel72 >= 1.25) : null} /></div></div>
                       </div>
@@ -736,12 +703,12 @@ export default function DefinitionsPage() {
                       <div className="flex justify-between">
                         <div>
                           <h4 className="font-semibold text-gray-900">NCDR (CathPCI)</h4>
-                          <div className="text-sm text-gray-800">Increase ≥0.3 mg/dL OR ≥50% within 48h OR dialysis (only if PTCA present)</div>
+                          <div className="text-sm text-gray-900">Increase ≥0.3 mg/dL OR ≥50% within 48h OR dialysis (only if PTCA present)</div>
                         </div>
                         <div className="text-sm">{results.hasPTCA ? (ncdrFinal ? <span className="text-green-700 font-semibold">✅</span> : <span className="text-red-700 font-semibold">❌</span>) : <span className="text-gray-400">—</span>}</div>
                       </div>
 
-                      <div className="mt-2 text-sm text-gray-800">
+                      <div className="mt-2 text-sm text-gray-900">
                         <div className="flex justify-between"><div>Absolute Δ (0–48h)</div><div><strong>{r.diffs.abs48 ?? '—'} mg/dL</strong> — <Present ok={r.diffs.abs48 !== null ? (r.diffs.abs48 >= 0.3) : null} /></div></div>
                         <div className="flex justify-between mt-1"><div>Relative (0–48h)</div><div><strong>{r.diffs.rel48 ?? '—'} ×</strong> — <Present ok={r.diffs.rel48 !== null ? (r.diffs.rel48 >= 1.5) : null} /></div></div>
                       </div>
@@ -752,7 +719,7 @@ export default function DefinitionsPage() {
                       <div className="flex justify-between">
                         <div>
                           <h4 className="font-semibold text-gray-900">ACR</h4>
-                          <div className="text-sm text-gray-800">Increase ≥0.5 mg/dL OR ≥25% within 48–72h</div>
+                          <div className="text-sm text-gray-900">Increase ≥0.5 mg/dL OR ≥25% within 48–72h</div>
                         </div>
                         <div className="text-sm">{acrFinal ? <span className="text-green-700 font-semibold">✅</span> : <span className="text-red-700 font-semibold">❌</span>}</div>
                       </div>
