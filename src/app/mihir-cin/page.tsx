@@ -833,7 +833,7 @@ async function saveToSupabase() {
           </div>
         </div>
 
-               {/* Debug / details (collapsible) */}
+                       {/* Debug / details (collapsible) */}
         <details className="bg-white rounded shadow p-4 mb-8">
           <summary className="cursor-pointer text-sm font-medium">Show calculation debug (timestamps, matched rows)</summary>
           <div className="mt-3 text-xs text-gray-800 space-y-2">
@@ -847,7 +847,13 @@ async function saveToSupabase() {
             <div><strong>confoundersAuto:</strong> {JSON.stringify(confoundersAuto)}</div>
           </div>
         </details>
-      </div>   {/* ✅ closes outermost main container */}
-    </div>     {/* ✅ closes overall page wrapper */}
-  );
-}
+
+      </div> {/* closes inner container (matching the main content wrapper) */}
+    </div>   {/* closes overall page wrapper (matching topmost <div>) */}
+  );        /* <- closes return(...) */
+}          /* <- closes the function component */
+
+/* IMPORTANT:
+   Do NOT add another `export default` here if the component was declared
+   with `export default function ...` at the top of this file.
+*/
