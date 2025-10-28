@@ -850,10 +850,10 @@ async function saveToSupabase() {
             <div><strong>confoundersAuto:</strong> {JSON.stringify(confoundersAuto)}</div>
           </div>
         </details>
-      </div>  {/* closes inner container */}
-    </div>    {/* closes overall wrapper */}
-  );          // closes return(...)
-}             // closes component function
+      </div>  
+    </div>  
+  );         
+}           
 
 
 
