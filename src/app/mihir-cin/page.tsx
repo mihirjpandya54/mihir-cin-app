@@ -761,8 +761,10 @@ async function saveToSupabase() {
 
               <div className="mt-2">
                 <strong>Contrast:</strong>
-                <div className="text-sm ml-2">Volume (earliest proc): {contrastVolume ?? '—'} mL — eGFR (baseline): {egfrBaseline ?? '—'} — ratio: {finalResult.details.contrastEgfr.ratio ?? '—'} {finalResult.supporting.highContrast ? <span className="text-green-800 font-semibold"> (HIGH)</span> : ''}</div>
-              </div>
+               <div className="text-sm ml-2">
+  Volume (earliest proc): {contrastVolume ?? '—'} mL — eGFR (baseline): {egfrBaseline ?? '—'} — ratio: {finalResult.details?.contrastEgfr?.ratio ?? '—'} {finalResult.supporting?.highContrast ? <span className="text-green-800 font-semibold"> (HIGH)</span> : ''}
+</div>
+
 
               <div className="mt-2">
                 <strong>Hemodynamics:</strong>
