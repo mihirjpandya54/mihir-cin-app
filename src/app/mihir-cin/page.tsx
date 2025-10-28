@@ -841,24 +841,7 @@ async function saveToSupabase() {
           </div>
         </div>
 
-                       {/* Debug / details (collapsible) */}
-  
-        <details className="bg-white rounded shadow p-4 mb-8">
-          <summary className="cursor-pointer text-sm font-medium">
-            Show calculation debug (timestamps, matched rows)
-          </summary>
-          <div className="mt-3 text-xs text-gray-800 space-y-2">
-            <div><strong>Procedures loaded:</strong> {procedures.length}</div>
-            <div><strong>Baseline meta:</strong> {baselineMeta ? JSON.stringify(baselineMeta) : '—'}</div>
-            <div><strong>scr24 meta:</strong> {scr24Meta ? JSON.stringify(scr24Meta) : '—'}</div>
-            <div><strong>urine24:</strong> {JSON.stringify(urine24)}</div>
-            <div><strong>contrastEgfr:</strong> {JSON.stringify(contrastEgfr)}</div>
-            <div><strong>hemodynamicInsult:</strong> {JSON.stringify(hemodynamicInsult)}</div>
-            <div><strong>bleedingCheck:</strong> {JSON.stringify(bleedingCheck)}</div>
-            <div><strong>confoundersAuto:</strong> {JSON.stringify(confoundersAuto)}</div>
-            <div><strong>Final result (safe):</strong> {JSON.stringify(safeFinal)}</div>
-          </div>
-        </details>
+                    
       </div>  
     </div>
   </div>
