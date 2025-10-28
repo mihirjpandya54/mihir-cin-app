@@ -15,6 +15,7 @@ export default function Home() {
     { name: "🧠 Hemodynamics", path: "/hemodynamics" },
     { name: "📈 Scores", path: "/scores" },
     { name: "📌 CIN Definitions", path: "/definitions" },
+    { name: "🧾 Mihir CIN Definition", path: "/mihir-cin" },
   ];
 
   return (
