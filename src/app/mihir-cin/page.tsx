@@ -770,9 +770,10 @@ async function saveToSupabase() {
                 <strong>Hemodynamics:</strong>
                 <div className="text-sm ml-2">MAP min (0–24): {finalResult.details?.hemodynamicInsult?.mapMin ?? '—'} — 
 Vasopressor in 0–24h: {finalResult.details?.hemodynamicInsult?.vasopressorFound ? 'Yes' : 'No'} — 
-<span className={finalResult.supporting.hemo ? 'text-green-800 font-semibold' : 'text-gray-900'}>
-  {finalResult.supporting.hemo ? 'INSULT' : 'OK'}
-</span></div>
+<span className={finalResult.supporting?.hemo ? 'text-green-800 font-semibold' : 'text-gray-900'}>
+  {finalResult.supporting?.hemo ? 'INSULT' : 'OK'}
+</span>
+</div>
               </div>
 
               <div className="mt-2">
