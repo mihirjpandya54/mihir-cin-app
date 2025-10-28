@@ -628,89 +628,95 @@ export default function MihirCinDefinition() {
   }, [baselineMeta, scr24Meta, oliguriaCheck, contrastEgfr, hemodynamicInsult, bleedingCheck, confoundersAuto, manualConfounder, firstProcedure, urine24, egfrBaseline, contrastVolume]);
 
   // ---------- Save function (insert or update) ----------
-  async function saveToSupabase() {
-    if (!patient || !firstProcedure) {
-      alert('No patient or procedure found.');
-      return;
-    }
-    if (!finalResult.canAssess) {
-      alert('Not assessable yet — missing data.');
-      return;
-    }
-
-    setSaving(true);
-    try {
-      const row: any = {
-        patient_id: patient.id,
-        mihir_cin_flag: finalResult.mihir_flag,
-        mihir_cin_category: finalResult.category,
-        absolute_scr_increase_24h: finalResult.absoluteDelta,
-        relative_scr_increase_24h: finalResult.relativeDelta,
-        oliguria_24h: finalResult.supporting.olig ?? null,
-        contrast_egfr_ratio: finalResult.details.contrastEgfr.ratio ?? null,
-        high_contrast_burden: finalResult.supporting.highContrast ?? null,
-        hemodynamic_instability_24h: finalResult.supporting.hemo ?? null,
-        major_bleeding_24h: finalResult.supporting.bleed ?? null,
-        sepsis_or_other_major_cause: manualConfounder || (finalResult.details.confoundersAuto.any ?? false),
-        within_24h: true,
-        adjudicated_by: adjudicatedBy ?? null,
-        calculated_at: new Date().toISOString(),
-        baseline_scr: baselineMeta?.value ?? null,
-        scr_24h: scr24Meta?.value ?? null
-      };
-
-      // check existing
-      const { data: existingRows, error: selErr } = await supabase
-        .from('mihir_cin_definition')
-        .select('*')
-        .eq('patient_id', patient.id);
-      if (selErr) {
-        console.error('select existing error', selErr);
-        alert('Save failed (select). See console.');
-        setSaving(false);
-        return;
-      }
-
-      if (existingRows && existingRows.length) {
-        // update first existing row (you can change behavior later to keep history)
-        const idToUpdate = existingRows[0].id;
-        const { error: upErr } = await supabase
-          .from('mihir_cin_definition')
-          .update(row)
-          .eq('id', idToUpdate);
-        if (upErr) {
-          console.error('update error', upErr);
-          alert('Save failed (update). See console.');
-        } else {
-          const { data: fresh } = await supabase
-            .from('mihir_cin_definition')
-            .select('*')
-            .eq('patient_id', patient.id);
-          setExisting((fresh && fresh[0]) ?? null);
-          alert('Saved (updated) ✅');
-        }
-      } else {
-        // insert
-        const { error: insErr, data: insData } = await supabase
-          .from('mihir_cin_definition')
-          .insert(row)
-          .select()
-          .single();
-        if (insErr) {
-          console.error('insert error', insErr);
-          alert('Save failed (insert). See console.');
-        } else {
-          setExisting(insData);
-          alert('Saved (inserted) ✅');
-        }
-      }
-    } catch (err) {
-      console.error('save error', err);
-      alert('Save failed — check console');
-    } finally {
-      setSaving(false);
-    }
+ // ---------- Save function (insert or update) ----------
+async function saveToSupabase() {
+  if (!patient || !firstProcedure) {
+    alert('No patient or procedure found.');
+    return;
   }
+  if (!finalResult?.canAssess) {
+    alert('Not assessable yet — missing data.');
+    return;
+  }
+
+  setSaving(true);
+  try {
+    const row: any = {
+      patient_id: patient.id,
+      mihir_cin_flag: finalResult.mihir_flag ?? null,
+      mihir_cin_category: finalResult.category ?? null,
+      absolute_scr_increase_24h: finalResult.absoluteDelta ?? null,
+      relative_scr_increase_24h: finalResult.relativeDelta ?? null,
+      oliguria_24h: finalResult.supporting?.olig ?? null,
+      contrast_egfr_ratio: finalResult.details?.contrastEgfr?.ratio ?? null,
+      high_contrast_burden: finalResult.supporting?.highContrast ?? null,
+      hemodynamic_instability_24h: finalResult.supporting?.hemo ?? null,
+      major_bleeding_24h: finalResult.supporting?.bleed ?? null,
+      sepsis_or_other_major_cause:
+        manualConfounder || (finalResult.details?.confoundersAuto?.any ?? false),
+      within_24h: true,
+      adjudicated_by: adjudicatedBy ?? null,
+      calculated_at: new Date().toISOString(),
+      baseline_scr: baselineMeta?.value ?? null,
+      scr_24h: scr24Meta?.value ?? null
+    };
+
+    // check existing
+    const { data: existingRows, error: selErr } = await supabase
+      .from('mihir_cin_definition')
+      .select('*')
+      .eq('patient_id', patient.id);
+
+    if (selErr) {
+      console.error('select existing error', selErr);
+      alert('Save failed (select). See console.');
+      setSaving(false);
+      return;
+    }
+
+    if (existingRows && existingRows.length > 0) {
+      // update first existing row
+      const idToUpdate = existingRows[0].id;
+      const { error: upErr } = await supabase
+        .from('mihir_cin_definition')
+        .update(row)
+        .eq('id', idToUpdate);
+
+      if (upErr) {
+        console.error('update error', upErr);
+        alert('Save failed (update). See console.');
+      } else {
+        const { data: fresh } = await supabase
+          .from('mihir_cin_definition')
+          .select('*')
+          .eq('patient_id', patient.id);
+        setExisting((fresh && fresh[0]) ?? null);
+        alert('Saved (updated) ✅');
+      }
+    } else {
+      // insert new row
+      const { error: insErr, data: insData } = await supabase
+        .from('mihir_cin_definition')
+        .insert(row)
+        .select()
+        .single();
+
+      if (insErr) {
+        console.error('insert error', insErr);
+        alert('Save failed (insert). See console.');
+      } else {
+        setExisting(insData);
+        alert('Saved (inserted) ✅');
+      }
+    }
+  } catch (err: any) {
+    console.error('save error', err);
+    alert(`Save failed — ${err.message ?? 'check console'}`);
+  } finally {
+    setSaving(false);
+  }
+}
+
 
   // ---------- Render ----------
   if (loading) {
