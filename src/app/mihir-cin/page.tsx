@@ -444,9 +444,15 @@ export default function MihirCinDefinition() {
     });
     let mapMin: number | null = null;
     if (candidates.length) {
-      const mins = candidates.map((c:any) => clampNum(c.map_min)).filter((v:any)=>v!=null);
-      if (mins.length) mapMin = Math.min(...mins);
-    }
+  const mins = candidates
+    .map((c: any) => clampNum(c.map_min))
+    .filter((v: number | null): v is number => v !== null);
+
+  if (mins.length > 0) {
+    mapMin = Math.min(...mins);
+  }
+}
+
     const mapInsult = mapMin !== null ? mapMin < 65 : false;
 
     // vasopressor check: medications with is_vasopressor_inotrope = true and med_date within [procDate, procDate OR next day]
