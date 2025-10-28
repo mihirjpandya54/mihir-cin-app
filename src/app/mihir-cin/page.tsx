@@ -444,14 +444,14 @@ export default function MihirCinDefinition() {
     });
     let mapMin: number | null = null;
     if (candidates.length) {
-  const mins = candidates
-    .map((c: any) => clampNum(c.map_min))
-    .filter((v: number | null): v is number => v !== null);
+      const mins = candidates
+        .map((c: any) => clampNum(c.map_min))
+        .filter((v: number | null): v is number => v !== null);
 
-  if (mins.length > 0) {
-    mapMin = Math.min(...mins);
-  }
-}
+      if (mins.length > 0) {
+        mapMin = Math.min(...mins);
+      }
+    }
 
     const mapInsult = mapMin !== null ? mapMin < 65 : false;
 
@@ -852,5 +852,6 @@ async function saveToSupabase() {
         </details>
       </div>  
     </div>  
+  </div>   {/* <-- ADDED this closing div to properly close the outermost wrapper */}
   );
 }
