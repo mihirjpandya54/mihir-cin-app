@@ -598,14 +598,24 @@ export default function DefinitionsPage() {
           <div className="mt-4 overflow-auto">
             <table className="w-full border-collapse text-sm">
               <thead>
-                <tr>
-                  <th className="border px-2 py-2 text-left">Exposure</th>
-                  <th className="border px-2 py-2 text-center">KDIGO</th>
-                  <th className="border px-2 py-2 text-center">ESUR</th>
-                  <th className="border px-2 py-2 text-center">ACR</th>
-                  <th className="border px-2 py-2 text-center">NCDR</th>
-                </tr>
-              </thead>
+  <tr>
+    <th className="border px-2 py-2 text-left bg-gray-800 text-white font-semibold">
+      Exposure
+    </th>
+    <th className="border px-2 py-2 text-center bg-gray-800 text-white font-semibold">
+      KDIGO
+    </th>
+    <th className="border px-2 py-2 text-center bg-gray-800 text-white font-semibold">
+      ESUR
+    </th>
+    <th className="border px-2 py-2 text-center bg-gray-800 text-white font-semibold">
+      ACR
+    </th>
+    <th className="border px-2 py-2 text-center bg-gray-800 text-white font-semibold">
+      NCDR
+    </th>
+  </tr>
+</thead>
               <tbody>
                 {results.list.map((it: any) => {
                   const kd = it.result.kdigo.status;
