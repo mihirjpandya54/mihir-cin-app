@@ -237,9 +237,9 @@ export default function DefinitionsPage() {
     baselineDate: string | null;
     baselineStable: boolean | null;
     peaks: {
-      peak_48?: { value: number; date: string | null } | null;
-      peak_72?: { value: number; date: string | null } | null;
-      peak_7d?: { value: number; date: string | null } | null;
+      peak_48: { value: number; date: string | null } | null;
+      peak_72: { value: number; date: string | null } | null;
+      peak_7d: { value: number; date: string | null } | null;
     };
     diffs: {
       abs48: number | null;
@@ -303,7 +303,11 @@ export default function DefinitionsPage() {
       return labs
         .map(l => ({ ...l, ts: rowTimestampLab(l) }))
         .filter(l => l.ts !== null && l.scr != null && (l.ts as number) >= start && (l.ts as number) <= end)
-        .map(l => ({ value: Number(l.scr), date: l.lab_date ?? l.created_at }));
+        .map(l => ({
+          value: Number(l.scr),
+          // ensure date is string | null (never undefined)
+          date: (l.lab_date ?? l.created_at) ?? null
+        }));
     }
 
     const arr48 = labsInWindow(0, 48);
@@ -540,7 +544,7 @@ export default function DefinitionsPage() {
               <h2 className="text-lg font-bold text-gray-900">Episode summary</h2>
               <div className="text-sm text-gray-900 mt-1">
                 <div><strong>Exposures:</strong> {exposures.map((e, i) => `${i + 1}. ${e.type} (${new Date(e.datetime).toLocaleString()})`).join(' — ')}</div>
-                <div className="mt-1"><strong>Baseline used:</strong> {results.base ? `${results.base.value} mg/dL on ${results.base.date}${results.base.stable ? '' : ' (UNSTABLE)'}` : <span className="text-red-700">No baseline — definitions not assessable</span>}</div>
+                <div className="mt-1"><strong>Baseline used:</strong> {results?.base ? `${results.base.value} mg/dL on ${results.base.date}${results.base.stable ? '' : ' (UNSTABLE)'}` : <span className="text-red-700">No baseline — definitions not assessable</span>}</div>
                 <div className="mt-1 text-xs text-gray-600">Baseline = latest serum creatinine measured on or before the <strong>first</strong> exposure. If rising in prior 7d, baseline is marked unstable.</div>
               </div>
             </div>
@@ -564,12 +568,12 @@ export default function DefinitionsPage() {
                 </tr>
               </thead>
               <tbody>
-                {results.list.map(it => {
+                {(results?.list ?? []).map(it => {
                   const kd = it.result.kdigo.status;
                   const es = it.result.esur.status;
                   const ac = it.result.acr.status;
                   const nc = it.result.ncdr.status;
-                  const showNCDR = results.hasPTCA && (it.type === 'PTCA' || it.type === 'FINAL');
+                  const showNCDR = results?.hasPTCA && (it.type === 'PTCA' || it.type === 'FINAL');
                   return (
                     <tr key={it.label}>
                       <td className="border px-2 py-2 text-gray-900">{it.label} — <span className="text-gray-700">{new Date(it.datetime).toLocaleString()}</span></td>
@@ -616,8 +620,8 @@ export default function DefinitionsPage() {
                     <h4 className="font-semibold text-gray-900 mb-2">Data summary</h4>
                     <div className="text-sm text-gray-900 space-y-1">
                       <div>
-                        <strong>Baseline SCr:</strong> {results.base ? `${results.base.value} mg/dL${results.base.stable ? '' : ' (UNSTABLE)'}` : <span className="text-red-700">No baseline</span>}
-                        {results.base?.date ? ` (on ${results.base.date})` : ''}
+                        <strong>Baseline SCr:</strong> {results?.base ? `${results.base.value} mg/dL${results.base.stable ? '' : ' (UNSTABLE)'}` : <span className="text-red-700">No baseline</span>}
+                        {results?.base?.date ? ` (on ${results.base.date})` : ''}
                       </div>
 
                       <div><strong>Peak (0–48 h):</strong> {r.peaks.peak_48 ? `${r.peaks.peak_48.value} mg/dL` : '—'}</div>
@@ -654,7 +658,7 @@ export default function DefinitionsPage() {
                   </div>
 
                   <div className="p-3 border rounded space-y-3">
-                    <div className="text-sm text-gray-900 mb-1"><strong>Baseline used:</strong> {results.base ? `${results.base.value} mg/dL on ${results.base.date}` : 'No baseline found'}</div>
+                    <div className="text-sm text-gray-900 mb-1"><strong>Baseline used:</strong> {results?.base ? `${results.base.value} mg/dL on ${results.base.date}` : 'No baseline found'}</div>
 
                     {/* KDIGO */}
                     <div className="p-2 border rounded bg-gray-50">
@@ -705,7 +709,7 @@ export default function DefinitionsPage() {
                           <h4 className="font-semibold text-gray-900">NCDR (CathPCI)</h4>
                           <div className="text-sm text-gray-900">Increase ≥0.3 mg/dL OR ≥50% within 48h OR dialysis (only if PTCA present)</div>
                         </div>
-                        <div className="text-sm">{results.hasPTCA ? (ncdrFinal ? <span className="text-green-700 font-semibold">✅</span> : <span className="text-red-700 font-semibold">❌</span>) : <span className="text-gray-400">—</span>}</div>
+                        <div className="text-sm">{results?.hasPTCA ? (ncdrFinal ? <span className="text-green-700 font-semibold">✅</span> : <span className="text-red-700 font-semibold">❌</span>) : <span className="text-gray-400">—</span>}</div>
                       </div>
 
                       <div className="mt-2 text-sm text-gray-900">
