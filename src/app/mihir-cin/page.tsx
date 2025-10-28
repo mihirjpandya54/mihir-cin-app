@@ -852,6 +852,6 @@ async function saveToSupabase() {
         </details>
       </div>  
     </div>  
-  </div>   {/* <-- ADDED this closing div to properly close the outermost wrapper */}
+  </div> 
   );
 }
