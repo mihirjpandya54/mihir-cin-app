@@ -518,7 +518,8 @@ export default function DefinitionsPage() {
 
       if (error) {
         console.error('upsert error', error);
-        alert('Save failed — check console');
+        alert(`Save failed: ${error.message}`);
+        
       } else {
         const { data: fresh } = await supabase
           .from('cin_definitions')
