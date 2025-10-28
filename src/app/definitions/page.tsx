@@ -253,10 +253,11 @@ export default function DefinitionsPage() {
     baselineDate: string | null;
     baselineStable: boolean | null;
     peaks: {
-      peak_48?: { value: number; date: string } | null;
-      peak_72?: { value: number; date: string } | null;
-      peak_7d?: { value: number; date: string } | null;
-    };
+  peak_48?: { value: number; date: string | null | undefined } | null;
+  peak_72?: { value: number; date: string | null | undefined } | null;
+  peak_7d?: { value: number; date: string | null | undefined } | null;
+};
+    
     diffs: {
       abs48: number | null;
       rel48: number | null; // ratio (e.g., 1.444)
