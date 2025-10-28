@@ -776,10 +776,17 @@ Vasopressor in 0–24h: {finalResult.details?.hemodynamicInsult?.vasopressorFoun
 </div>
               </div>
 
-              <div className="mt-2">
-                <strong>Bleeding:</strong>
-                <div className="text-sm ml-2">Baseline Hb: {finalResult.details.bleedingCheck.baselineHb ?? '—'} — 0–24 Hb: {finalResult.details.bleedingCheck.hb24 ?? '—'} — Drop: {finalResult.details.bleedingCheck.drop ?? '—'} {finalResult.supporting.bleed ? <span className="text-green-800 font-semibold"> (MAJOR)</span> : ''}</div>
-              </div>
+              <div className="text-sm ml-2">
+  Baseline Hb: {finalResult.details?.bleedingCheck?.baselineHb ?? '—'} — 
+  0–24 Hb: {finalResult.details?.bleedingCheck?.hb24 ?? '—'} — 
+  Drop: {finalResult.details?.bleedingCheck?.drop ?? '—'} 
+  {finalResult.supporting?.bleed ? (
+    <span className="text-green-800 font-semibold"> (MAJOR)</span>
+  ) : (
+    ''
+  )}
+</div>
+
 
               <div className="mt-2">
                 <strong>Auto confounders:</strong>
