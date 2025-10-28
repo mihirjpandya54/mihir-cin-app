@@ -854,4 +854,3 @@ async function saveToSupabase() {
     </div>  
   );
 }
-}
