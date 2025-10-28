@@ -860,6 +860,7 @@ async function saveToSupabase() {
           </div>
         </details>
       </div>  
-    </div>  
+    </div>
+  </div>
   );
 }
