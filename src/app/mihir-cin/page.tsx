@@ -134,12 +134,49 @@ export default function MihirCinDefinition() {
         setPatient(p ?? null);
 
         // procedures: try view then fallbacks
-        let procRows: any[] = [];
-        const { data: pv, error: pvErr } = await supabase
-          .from('procedures_view')
-          .select('id, patient_id, type, procedure_datetime')
-          .eq('patient_id', patientId);
-        if (!pvErr && pv) procRows = pv;
+        // ---------- Procedures fetch (patched to include contrast volume if missing) ----------
+let procRows: any[] = [];
+
+// 1️⃣ Try fetching from procedures_view first
+const { data: pv, error: pvErr } = await supabase
+  .from('procedures_view')
+  .select('*')
+  .eq('patient_id', patientId);
+
+if (!pvErr && pv) procRows = pv;
+
+// 2️⃣ If any record is missing contrast_volume_ml, patch from angiography_raw or ptca_raw
+if (procRows.some((r: any) => r.contrast_volume_ml == null)) {
+  console.log('⚙️ Patching missing contrast_volume_ml from raw tables…');
+
+  // parallel fetch from both raw tables
+  const [angiography, ptca] = await Promise.all([
+    supabase.from('angiography_raw')
+      .select('id, patient_id, contrast_volume_ml, procedure_date, procedure_time, created_at')
+      .eq('patient_id', patientId),
+    supabase.from('ptca_raw')
+      .select('id, patient_id, contrast_volume_ml, procedure_date, procedure_time, created_at')
+      .eq('patient_id', patientId)
+  ]);
+
+  // make quick lookup maps
+  const angiographyMap = Object.fromEntries(
+    (angiography.data || []).map((r: any) => [r.id, r.contrast_volume_ml])
+  );
+  const ptcaMap = Object.fromEntries(
+    (ptca.data || []).map((r: any) => [r.id, r.contrast_volume_ml])
+  );
+
+  // inject missing contrast values
+  procRows = procRows.map((r: any) => {
+    if (r.contrast_volume_ml != null) return r;
+    if (r.type?.toUpperCase() === 'CAG' && angiographyMap[r.id] != null)
+      return { ...r, contrast_volume_ml: angiographyMap[r.id] };
+    if (r.type?.toUpperCase() === 'PTCA' && ptcaMap[r.id] != null)
+      return { ...r, contrast_volume_ml: ptcaMap[r.id] };
+    return r;
+  });
+}
 
         if (!procRows.length) {
           const { data: ag } = await supabase
