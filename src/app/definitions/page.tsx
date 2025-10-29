@@ -86,13 +86,10 @@ function rowTimestampLabMeta(l: LabRow): { ts: number | null; isDateOnly: boolea
 }
 
 /**
- * Fluid meta: for date-only fluid_date we provide dayStart/dayEnd so callers can test interval overlap.
- * Returns:
- *  - ts: midday timestamp (for compatibility)
- *  - isDateOnly: boolean
- *  - dayStart/dayEnd: ms timestamps for the calendar day (if date-only)
+ * Fluid meta: for date-only fluid_date we provide midday timestamp (for compatibility)
+ * and a flag isDateOnly so callers can simply compare calendar dates when required.
  */
-function rowTimestampFluidMeta(f: FluidRow): { ts: number | null; isDateOnly: boolean; dayStart?: number; dayEnd?: number } {
+function rowTimestampFluidMeta(f: FluidRow): { ts: number | null; isDateOnly: boolean } {
   try {
     if (!f) return { ts: null, isDateOnly: false };
     if (f.fluid_date) {
@@ -101,11 +98,9 @@ function rowTimestampFluidMeta(f: FluidRow): { ts: number | null; isDateOnly: bo
         const ts = new Date(s).getTime();
         return { ts: Number.isFinite(ts) ? ts : null, isDateOnly: false };
       } else {
-        // date-only -> full local calendar day [00:00:00, 23:59:59.999]
-        const dayStart = new Date(s + 'T00:00:00').getTime();
-        const dayEnd = dayStart + 24 * HOURS - 1;
-        const midday = dayStart + 12 * HOURS;
-        return { ts: Number.isFinite(midday) ? midday : null, isDateOnly: true, dayStart, dayEnd };
+        // date-only -> use midday to preserve same calendar date
+        const midday = new Date(s + 'T12:00:00').getTime();
+        return { ts: Number.isFinite(midday) ? midday : null, isDateOnly: true };
       }
     }
     if (f.inserted_at) {
@@ -116,11 +111,6 @@ function rowTimestampFluidMeta(f: FluidRow): { ts: number | null; isDateOnly: bo
   } catch {
     return { ts: null, isDateOnly: false };
   }
-}
-
-// small helper to test interval overlap
-function intervalsOverlap(aStart: number, aEnd: number, bStart: number, bEnd: number) {
-  return !(aEnd < bStart || aStart > bEnd);
 }
 
 // UI small helpers
@@ -326,28 +316,14 @@ export default function DefinitionsPage() {
 
     // if no baseline -> many definitions not assessable
     if (!baseline) {
-      const startU = procTs;
-      const endU = procTs + 24 * HOURS;
-
-      // Build urine entries with overlap logic (date-only day intervals or precise timestamps)
+      // SIMPLE DATE-ONLY URINE LOGIC: match calendar date only (YYYY-MM-DD)
+      const procDate = new Date(procTs).toLocaleDateString('en-CA');
       const urineEntries = fluids
         .map(f => ({ ...f, meta: rowTimestampFluidMeta(f) }))
+        .filter(f => f.output_ml != null && f.meta.ts !== null)
         .filter(f => {
-          if (f.output_ml == null) return false;
-          const m = f.meta;
-          if (!m) return false;
-
-          // date-only day interval
-          if (m.isDateOnly && typeof m.dayStart === 'number' && typeof m.dayEnd === 'number') {
-            return intervalsOverlap(m.dayStart, m.dayEnd, startU, endU);
-          }
-
-          // exact timestamp
-          if (m.ts !== null) {
-            const t = m.ts;
-            return t >= startU && t <= endU;
-          }
-          return false;
+          const fluidDate = new Date(f.meta.ts!).toLocaleDateString('en-CA');
+          return fluidDate === procDate;
         });
 
       const urineTotal = urineEntries.reduce((s, x) => s + (x.output_ml ?? 0), 0);
@@ -399,25 +375,15 @@ export default function DefinitionsPage() {
     const abs7 = peak7d ? Number((peak7d.value - baseVal).toFixed(3)) : null;
     const rel7 = peak7d ? Number((peak7d.value / baseVal).toFixed(3)) : null;
 
-    // ---------- Urine: robust overlap logic ----------
-    const startUrine = procTs;
-    const endUrine = procTs + 24 * HOURS;
+    // ---------- Urine: DATE-ONLY logic (calendar day match) ----------
+    // This only includes fluid rows whose calendar date equals procedure date (YYYY-MM-DD).
+    const procDate = new Date(procTs).toLocaleDateString('en-CA');
     const urineEntries = fluids
       .map(f => ({ ...f, meta: rowTimestampFluidMeta(f) }))
+      .filter(f => f.output_ml != null && f.meta.ts !== null)
       .filter(f => {
-        if (f.output_ml == null) return false;
-        const m = f.meta;
-        if (!m) return false;
-
-        if (m.isDateOnly && typeof m.dayStart === 'number' && typeof m.dayEnd === 'number') {
-          return intervalsOverlap(m.dayStart, m.dayEnd, startUrine, endUrine);
-        }
-
-        if (m.ts !== null) {
-          const t = m.ts;
-          return t >= startUrine && t <= endUrine;
-        }
-        return false;
+        const fluidDate = new Date(f.meta.ts!).toLocaleDateString('en-CA');
+        return fluidDate === procDate;
       });
 
     const urineTotal = urineEntries.reduce((s, x) => s + (x.output_ml ?? 0), 0);
