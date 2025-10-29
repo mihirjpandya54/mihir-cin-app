@@ -316,16 +316,27 @@ export default function DefinitionsPage() {
 
     // if no baseline -> many definitions not assessable
     if (!baseline) {
-      // SIMPLE DATE-ONLY URINE LOGIC: match calendar date only (YYYY-MM-DD)
-      const procDate = new Date(procTs).toLocaleDateString('en-CA');
-      const urineEntries = fluids
-        .map(f => ({ ...f, meta: rowTimestampFluidMeta(f) }))
-        .filter(f => f.output_ml != null && f.meta.ts !== null)
-        .filter(f => {
-          const fluidDate = new Date(f.meta.ts!).toLocaleDateString('en-CA');
-          return fluidDate === procDate;
-        });
+   // --- NEW urine output logic (date-only + prevent duplicates) ---
+const procDate = new Date(procTs).toLocaleDateString('en-CA');
+const seen = new Set<string>();
 
+const urineEntries = fluids
+  .map(f => ({ ...f, meta: rowTimestampFluidMeta(f) }))
+  .filter(f => f.output_ml != null && f.meta.ts !== null)
+  .filter(f => {
+    const fluidDate = new Date(f.meta.ts!).toLocaleDateString('en-CA');
+    if (fluidDate !== procDate) return false;
+
+    // ✅ if timing column exists in Supabase (like “0–24 CAG” / “Pre PTCA”):
+    const timing = (f as any).timing?.toLowerCase?.() || '';
+    if (timing && !timing.includes(anchorType.toLowerCase())) return false;
+
+    // ✅ avoid double-counting same date rows
+    if (seen.has(fluidDate)) return false;
+    seen.add(fluidDate);
+
+    return true;
+  });
       const urineTotal = urineEntries.reduce((s, x) => s + (x.output_ml ?? 0), 0);
       const urineDataPresent = urineEntries.length > 0;
       const urineLowAuto = urineDataPresent ? urineTotal < urineThreshold : null;
