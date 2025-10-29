@@ -87,7 +87,7 @@ function fmt(n: number | null | undefined) {
 }
 
 // ---------- Component ----------
-export default function MihirCinDefinition(): JSX.Element {
+export default function MihirCinDefinition() {
   // data
   const [patient, setPatient] = useState<any | null>(null);
   const [procedures, setProcedures] = useState<any[]>([]);
