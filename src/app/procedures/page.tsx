@@ -564,7 +564,7 @@ export default function ProceduresPage() {
             <label className="text-sm text-gray-800">Date</label>
             <input
               type="date"
-              className="border border-gray-300 rounded p-2 text-sm w-full"
+              className="border border-gray-300 rounded p-2 text-sm w-full text-gray-900"
               value={angio.procedure_date ?? ''}
               onChange={e => setAngio(prev => ({ ...prev, procedure_date: e.target.value || null }))}
             />
@@ -573,7 +573,7 @@ export default function ProceduresPage() {
             <label className="text-sm text-gray-800">Time</label>
             <input
               type="time"
-              className="border border-gray-300 rounded p-2 text-sm w-full"
+              className="border border-gray-300 rounded p-2 text-sm w-full text-gray-900"
               value={angio.procedure_time ?? ''}
               onChange={e => setAngio(prev => ({ ...prev, procedure_time: e.target.value || null }))}
             />
@@ -581,7 +581,7 @@ export default function ProceduresPage() {
           <div>
             <label className="text-sm text-gray-800">Access Site</label>
             <input
-              className="border border-gray-300 rounded p-2 text-sm w-full"
+              className="border border-gray-300 rounded p-2 text-sm w-full text-gray-900"
               value={angio.access_site ?? ''}
               onChange={e => setAngio(prev => ({ ...prev, access_site: e.target.value || null }))}
             />
@@ -590,7 +590,7 @@ export default function ProceduresPage() {
           <div>
             <label className="text-sm text-gray-800">Catheter Type</label>
             <input
-              className="border border-gray-300 rounded p-2 text-sm w-full"
+              className="border border-gray-300 rounded p-2 text-sm w-full text-gray-900"
               value={angio.catheter_type ?? ''}
               onChange={e => setAngio(prev => ({ ...prev, catheter_type: e.target.value || null }))}
             />
@@ -598,7 +598,7 @@ export default function ProceduresPage() {
           <div>
             <label className="text-sm text-gray-800">Contrast Agent</label>
             <input
-              className="border border-gray-300 rounded p-2 text-sm w-full"
+              className="border border-gray-300 rounded p-2 text-sm w-full text-gray-900"
               value={angio.contrast_agent ?? ''}
               onChange={e => setAngio(prev => ({ ...prev, contrast_agent: e.target.value || null }))}
             />
@@ -607,7 +607,7 @@ export default function ProceduresPage() {
             <label className="text-sm text-gray-800">Contrast Volume (ml)</label>
             <input
               type="number"
-              className="border border-gray-300 rounded p-2 text-sm w-full"
+              className="border border-gray-300 rounded p-2 text-sm w-full text-gray-900"
               value={angio.contrast_volume_ml ?? ''}
               onChange={e => setAngio(prev => ({ ...prev, contrast_volume_ml: toNumOrNull(e.target.value) }))}
             />
@@ -616,7 +616,7 @@ export default function ProceduresPage() {
           <div className="md:col-span-2 lg:col-span-3">
             <label className="text-sm text-gray-800">LM Lesion</label>
             <input
-              className="border border-gray-300 rounded p-2 text-sm w-full"
+              className="border border-gray-300 rounded p-2 text-sm w-full text-gray-900"
               value={angio.lm_lesion_description ?? ''}
               onChange={e => setAngio(prev => ({ ...prev, lm_lesion_description: e.target.value || null }))}
             />
@@ -624,7 +624,7 @@ export default function ProceduresPage() {
           <div className="md:col-span-2 lg:col-span-3">
             <label className="text-sm text-gray-800">LAD Lesion</label>
             <input
-              className="border border-gray-300 rounded p-2 text-sm w-full"
+              className="border border-gray-300 rounded p-2 text-sm w-full text-gray-900"
               value={angio.lad_lesion_description ?? ''}
               onChange={e => setAngio(prev => ({ ...prev, lad_lesion_description: e.target.value || null }))}
             />
@@ -632,7 +632,7 @@ export default function ProceduresPage() {
           <div className="md:col-span-2 lg:col-span-3">
             <label className="text-sm text-gray-800">LCx Lesion</label>
             <input
-              className="border border-gray-300 rounded p-2 text-sm w-full"
+              className="border border-gray-300 rounded p-2 text-sm w-full text-gray-900"
               value={angio.lcx_lesion_description ?? ''}
               onChange={e => setAngio(prev => ({ ...prev, lcx_lesion_description: e.target.value || null }))}
             />
@@ -640,7 +640,7 @@ export default function ProceduresPage() {
           <div className="md:col-span-2 lg:col-span-3">
             <label className="text-sm text-gray-800">RCA Lesion</label>
             <input
-              className="border border-gray-300 rounded p-2 text-sm w-full"
+              className="border border-gray-300 rounded p-2 text-sm w-full text-gray-900"
               value={angio.rca_lesion_description ?? ''}
               onChange={e => setAngio(prev => ({ ...prev, rca_lesion_description: e.target.value || null }))}
             />
@@ -649,7 +649,7 @@ export default function ProceduresPage() {
           <div className="md:col-span-2 lg:col-span-3">
             <label className="text-sm text-gray-800">Impression</label>
             <textarea
-              className="border border-gray-300 rounded p-2 text-sm w-full min-h-[80px]"
+              className="border border-gray-300 rounded p-2 text-sm w-full min-h-[80px] text-gray-900"
               value={angio.impression ?? ''}
               onChange={e => setAngio(prev => ({ ...prev, impression: e.target.value || null }))}
             />
@@ -657,7 +657,7 @@ export default function ProceduresPage() {
           <div className="md:col-span-2 lg:col-span-3">
             <label className="text-sm text-gray-800">Advice / Notes</label>
             <textarea
-              className="border border-gray-300 rounded p-2 text-sm w-full min-h-[80px]"
+              className="border border-gray-300 rounded p-2 text-sm w-full min-h-[80px] text-gray-900"
               value={angio.advice ?? angio.notes ?? ''}
               onChange={e => setAngio(prev => ({ ...prev, advice: e.target.value || null, notes: e.target.value || null }))}
             />
@@ -671,7 +671,7 @@ export default function ProceduresPage() {
             <label className="text-sm text-gray-800">Date</label>
             <input
               type="date"
-              className="border border-gray-300 rounded p-2 text-sm w-full"
+              className="border border-gray-300 rounded p-2 text-sm w-full text-gray-900"
               value={ptca.procedure_date ?? ''}
               onChange={e => setPtca(prev => ({ ...prev, procedure_date: e.target.value || null }))}
             />
@@ -680,7 +680,7 @@ export default function ProceduresPage() {
             <label className="text-sm text-gray-800">Time</label>
             <input
               type="time"
-              className="border border-gray-300 rounded p-2 text-sm w-full"
+              className="border border-gray-300 rounded p-2 text-sm w-full text-gray-900"
               value={ptca.procedure_time ?? ''}
               onChange={e => setPtca(prev => ({ ...prev, procedure_time: e.target.value || null }))}
             />
@@ -688,7 +688,7 @@ export default function ProceduresPage() {
           <div>
             <label className="text-sm text-gray-800">Access Site</label>
             <input
-              className="border border-gray-300 rounded p-2 text-sm w-full"
+              className="border border-gray-300 rounded p-2 text-sm w-full text-gray-900"
               value={ptca.access_site ?? ''}
               onChange={e => setPtca(prev => ({ ...prev, access_site: e.target.value || null }))}
             />
@@ -697,7 +697,7 @@ export default function ProceduresPage() {
           <div>
             <label className="text-sm text-gray-800">Guiding Catheter</label>
             <input
-              className="border border-gray-300 rounded p-2 text-sm w-full"
+              className="border border-gray-300 rounded p-2 text-sm w-full text-gray-900"
               value={ptca.guiding_catheter ?? ''}
               onChange={e => setPtca(prev => ({ ...prev, guiding_catheter: e.target.value || null }))}
             />
@@ -705,7 +705,7 @@ export default function ProceduresPage() {
           <div>
             <label className="text-sm text-gray-800">Contrast Agent</label>
             <input
-              className="border border-gray-300 rounded p-2 text-sm w-full"
+              className="border border-gray-300 rounded p-2 text-sm w-full text-gray-900"
               value={ptca.contrast_agent ?? ''}
               onChange={e => setPtca(prev => ({ ...prev, contrast_agent: e.target.value || null }))}
             />
@@ -714,7 +714,7 @@ export default function ProceduresPage() {
             <label className="text-sm text-gray-800">Contrast Volume (ml)</label>
             <input
               type="number"
-              className="border border-gray-300 rounded p-2 text-sm w-full"
+              className="border border-gray-300 rounded p-2 text-sm w-full text-gray-900"
               value={ptca.contrast_volume_ml ?? ''}
               onChange={e => setPtca(prev => ({ ...prev, contrast_volume_ml: toNumOrNull(e.target.value) }))}
             />
@@ -723,7 +723,7 @@ export default function ProceduresPage() {
           <div className="md:col-span-2 lg:col-span-3">
             <label className="text-sm text-gray-800">Predilatation Details</label>
             <textarea
-              className="border border-gray-300 rounded p-2 text-sm w-full min-h-[60px]"
+              className="border border-gray-300 rounded p-2 text-sm w-full min-h-[60px] text-gray-900"
               value={ptca.predilatation_details ?? ''}
               onChange={e => setPtca(prev => ({ ...prev, predilatation_details: e.target.value || null }))}
             />
@@ -731,7 +731,7 @@ export default function ProceduresPage() {
           <div className="md:col-span-2 lg:col-span-3">
             <label className="text-sm text-gray-800">Stent Details</label>
             <textarea
-              className="border border-gray-300 rounded p-2 text-sm w-full min-h-[60px]"
+              className="border border-gray-300 rounded p-2 text-sm w-full min-h-[60px] text-gray-900"
               value={ptca.stent_details ?? ''}
               onChange={e => setPtca(prev => ({ ...prev, stent_details: e.target.value || null }))}
             />
@@ -739,7 +739,7 @@ export default function ProceduresPage() {
           <div className="md:col-span-2 lg:col-span-3">
             <label className="text-sm text-gray-800">Post-dilatation Details</label>
             <textarea
-              className="border border-gray-300 rounded p-2 text-sm w-full min-h-[60px]"
+              className="border border-gray-300 rounded p-2 text-sm w-full min-h-[60px] text-gray-900"
               value={ptca.post_dilatation_details ?? ''}
               onChange={e => setPtca(prev => ({ ...prev, post_dilatation_details: e.target.value || null }))}
             />
@@ -748,7 +748,7 @@ export default function ProceduresPage() {
           <div>
             <label className="text-sm text-gray-800">TIMI Flow (post)</label>
             <input
-              className="border border-gray-300 rounded p-2 text-sm w-full"
+              className="border border-gray-300 rounded p-2 text-sm w-full text-gray-900"
               value={ptca.timi_flow_post ?? ''}
               onChange={e => setPtca(prev => ({ ...prev, timi_flow_post: e.target.value || null }))}
             />
@@ -756,7 +756,7 @@ export default function ProceduresPage() {
           <div>
             <label className="text-sm text-gray-800">Complications</label>
             <input
-              className="border border-gray-300 rounded p-2 text-sm w-full"
+              className="border border-gray-300 rounded p-2 text-sm w-full text-gray-900"
               value={ptca.complications ?? ''}
               onChange={e => setPtca(prev => ({ ...prev, complications: e.target.value || null }))}
             />
@@ -764,7 +764,7 @@ export default function ProceduresPage() {
           <div>
             <label className="text-sm text-gray-800">Procedure Success</label>
             <select
-              className="border border-gray-300 rounded p-2 text-sm w-full"
+              className="border border-gray-300 rounded p-2 text-sm w-full text-gray-900"
               value={ptca.procedure_success === null ? '' : ptca.procedure_success ? 'yes' : 'no'}
               onChange={e =>
                 setPtca(prev => ({
@@ -782,7 +782,7 @@ export default function ProceduresPage() {
           <div className="md:col-span-2 lg:col-span-3">
             <label className="text-sm text-gray-800">Notes</label>
             <textarea
-              className="border border-gray-300 rounded p-2 text-sm w-full min-h-[80px]"
+              className="border border-gray-300 rounded p-2 text-sm w-full min-h-[80px] text-gray-900"
               value={ptca.notes ?? ''}
               onChange={e => setPtca(prev => ({ ...prev, notes: e.target.value || null }))}
             />
@@ -796,7 +796,7 @@ export default function ProceduresPage() {
             <label className="text-sm text-gray-800">Echo Date</label>
             <input
               type="date"
-              className="border border-gray-300 rounded p-2 text-sm w-full"
+              className="border border-gray-300 rounded p-2 text-sm w-full text-gray-900"
               value={echo.echo_date ?? ''}
               onChange={e => setEcho(prev => ({ ...prev, echo_date: e.target.value || null }))}
             />
@@ -805,7 +805,7 @@ export default function ProceduresPage() {
             <label className="text-sm text-gray-800">EF (%)</label>
             <input
               type="number"
-              className="border border-gray-300 rounded p-2 text-sm w-full"
+              className="border border-gray-300 rounded p-2 text-sm w-full text-gray-900"
               value={echo.ef_percent ?? ''}
               onChange={e => setEcho(prev => ({ ...prev, ef_percent: toNumOrNull(e.target.value) }))}
             />
@@ -813,7 +813,7 @@ export default function ProceduresPage() {
           <div>
             <label className="text-sm text-gray-800">LV Function</label>
             <input
-              className="border border-gray-300 rounded p-2 text-sm w-full"
+              className="border border-gray-300 rounded p-2 text-sm w-full text-gray-900"
               value={echo.lv_function ?? ''}
               onChange={e => setEcho(prev => ({ ...prev, lv_function: e.target.value || null }))}
             />
@@ -822,7 +822,7 @@ export default function ProceduresPage() {
           <div className="md:col-span-2 lg:col-span-3">
             <label className="text-sm text-gray-800">RWMA</label>
             <input
-              className="border border-gray-300 rounded p-2 text-sm w-full"
+              className="border border-gray-300 rounded p-2 text-sm w-full text-gray-900"
               value={echo.rwma ?? ''}
               onChange={e => setEcho(prev => ({ ...prev, rwma: e.target.value || null }))}
             />
@@ -830,7 +830,7 @@ export default function ProceduresPage() {
           <div className="md:col-span-2 lg:col-span-3">
             <label className="text-sm text-gray-800">Valve Findings</label>
             <textarea
-              className="border border-gray-300 rounded p-2 text-sm w-full min-h-[80px]"
+              className="border border-gray-300 rounded p-2 text-sm w-full min-h-[80px] text-gray-900"
               value={echo.valve_findings ?? ''}
               onChange={e => setEcho(prev => ({ ...prev, valve_findings: e.target.value || null }))}
             />
@@ -847,7 +847,7 @@ export default function ProceduresPage() {
             <label className="text-sm text-gray-800">Procedure Date & Time</label>
             <input
               type="datetime-local"
-              className="border border-gray-300 rounded p-2 text-sm w-full"
+              className="border border-gray-300 rounded p-2 text-sm w-full text-gray-900"
               value={poba.procedure_datetime ?? ''}
               onChange={e => setPoba(prev => ({ ...prev, procedure_datetime: e.target.value || null }))}
             />
@@ -856,7 +856,7 @@ export default function ProceduresPage() {
             <label className="text-sm text-gray-800">Contrast Volume (ml)</label>
             <input
               type="number"
-              className="border border-gray-300 rounded p-2 text-sm w-full"
+              className="border border-gray-300 rounded p-2 text-sm w-full text-gray-900"
               value={poba.contrast_volume_ml ?? ''}
               onChange={e => setPoba(prev => ({ ...prev, contrast_volume_ml: toNumOrNull(e.target.value) }))}
             />
@@ -864,7 +864,7 @@ export default function ProceduresPage() {
           <div>
             <label className="text-sm text-gray-800">Access Site</label>
             <input
-              className="border border-gray-300 rounded p-2 text-sm w-full"
+              className="border border-gray-300 rounded p-2 text-sm w-full text-gray-900"
               value={poba.access_site ?? ''}
               onChange={e => setPoba(prev => ({ ...prev, access_site: e.target.value || null }))}
             />
@@ -878,7 +878,7 @@ export default function ProceduresPage() {
             <label className="text-sm text-gray-800">Procedure Date & Time</label>
             <input
               type="datetime-local"
-              className="border border-gray-300 rounded p-2 text-sm w-full"
+              className="border border-gray-300 rounded p-2 text-sm w-full text-gray-900"
               value={thrombus.procedure_datetime ?? ''}
               onChange={e => setThrombus(prev => ({ ...prev, procedure_datetime: e.target.value || null }))}
             />
@@ -887,7 +887,7 @@ export default function ProceduresPage() {
             <label className="text-sm text-gray-800">Contrast Volume (ml)</label>
             <input
               type="number"
-              className="border border-gray-300 rounded p-2 text-sm w-full"
+              className="border border-gray-300 rounded p-2 text-sm w-full text-gray-900"
               value={thrombus.contrast_volume_ml ?? ''}
               onChange={e => setThrombus(prev => ({ ...prev, contrast_volume_ml: toNumOrNull(e.target.value) }))}
             />
@@ -895,7 +895,7 @@ export default function ProceduresPage() {
           <div>
             <label className="text-sm text-gray-800">Access Site</label>
             <input
-              className="border border-gray-300 rounded p-2 text-sm w-full"
+              className="border border-gray-300 rounded p-2 text-sm w-full text-gray-900"
               value={thrombus.access_site ?? ''}
               onChange={e => setThrombus(prev => ({ ...prev, access_site: e.target.value || null }))}
             />
@@ -908,7 +908,7 @@ export default function ProceduresPage() {
           <div>
             <label className="text-sm text-gray-800">IABP Inserted</label>
             <select
-              className="border border-gray-300 rounded p-2 text-sm w-full"
+              className="border border-gray-300 rounded p-2 text-sm w-full text-gray-900"
               value={iabp.iabp_inserted ? 'yes' : 'no'}
               onChange={e => setIabp(prev => ({ ...prev, iabp_inserted: e.target.value === 'yes' }))}
             >
@@ -920,7 +920,7 @@ export default function ProceduresPage() {
             <label className="text-sm text-gray-800">Insertion Date & Time</label>
             <input
               type="datetime-local"
-              className="border border-gray-300 rounded p-2 text-sm w-full"
+              className="border border-gray-300 rounded p-2 text-sm w-full text-gray-900"
               value={iabp.insertion_datetime ?? ''}
               onChange={e => setIabp(prev => ({ ...prev, insertion_datetime: e.target.value || null }))}
             />
@@ -929,7 +929,7 @@ export default function ProceduresPage() {
             <label className="text-sm text-gray-800">Removal Date & Time</label>
             <input
               type="datetime-local"
-              className="border border-gray-300 rounded p-2 text-sm w-full"
+              className="border border-gray-300 rounded p-2 text-sm w-full text-gray-900"
               value={iabp.removal_datetime ?? ''}
               onChange={e => setIabp(prev => ({ ...prev, removal_datetime: e.target.value || null }))}
             />
@@ -937,7 +937,7 @@ export default function ProceduresPage() {
           <div className="md:col-span-2 lg:col-span-3">
             <label className="text-sm text-gray-800">Indication</label>
             <textarea
-              className="border border-gray-300 rounded p-2 text-sm w-full min-h-[60px]"
+              className="border border-gray-300 rounded p-2 text-sm w-full min-h-[60px] text-gray-900"
               value={iabp.indication ?? ''}
               onChange={e => setIabp(prev => ({ ...prev, indication: e.target.value || null }))}
             />
@@ -951,7 +951,7 @@ export default function ProceduresPage() {
             <label className="text-sm text-gray-800">Insertion Date & Time</label>
             <input
               type="datetime-local"
-              className="border border-gray-300 rounded p-2 text-sm w-full"
+              className="border border-gray-300 rounded p-2 text-sm w-full text-gray-900"
               value={tpi.insertion_datetime ?? ''}
               onChange={e => setTpi(prev => ({ ...prev, insertion_datetime: e.target.value || null }))}
             />
@@ -959,7 +959,7 @@ export default function ProceduresPage() {
           <div>
             <label className="text-sm text-gray-800">Device Type</label>
             <input
-              className="border border-gray-300 rounded p-2 text-sm w-full"
+              className="border border-gray-300 rounded p-2 text-sm w-full text-gray-900"
               value={tpi.device_type ?? ''}
               onChange={e => setTpi(prev => ({ ...prev, device_type: e.target.value || null }))}
             />
@@ -967,7 +967,7 @@ export default function ProceduresPage() {
           <div>
             <label className="text-sm text-gray-800">Indication</label>
             <input
-              className="border border-gray-300 rounded p-2 text-sm w-full"
+              className="border border-gray-300 rounded p-2 text-sm w-full text-gray-900"
               value={tpi.indication ?? ''}
               onChange={e => setTpi(prev => ({ ...prev, indication: e.target.value || null }))}
             />
@@ -981,7 +981,7 @@ export default function ProceduresPage() {
             <label className="text-sm text-gray-800">Insertion Date & Time</label>
             <input
               type="datetime-local"
-              className="border border-gray-300 rounded p-2 text-sm w-full"
+              className="border border-gray-300 rounded p-2 text-sm w-full text-gray-900"
               value={device.insertion_datetime ?? ''}
               onChange={e => setDevice(prev => ({ ...prev, insertion_datetime: e.target.value || null }))}
             />
@@ -989,7 +989,7 @@ export default function ProceduresPage() {
           <div>
             <label className="text-sm text-gray-800">Device Type</label>
             <input
-              className="border border-gray-300 rounded p-2 text-sm w-full"
+              className="border border-gray-300 rounded p-2 text-sm w-full text-gray-900"
               value={device.device_type ?? ''}
               onChange={e => setDevice(prev => ({ ...prev, device_type: e.target.value || null }))}
             />
@@ -997,7 +997,7 @@ export default function ProceduresPage() {
           <div>
             <label className="text-sm text-gray-800">Indication</label>
             <input
-              className="border border-gray-300 rounded p-2 text-sm w-full"
+              className="border border-gray-300 rounded p-2 text-sm w-full text-gray-900"
               value={device.indication ?? ''}
               onChange={e => setDevice(prev => ({ ...prev, indication: e.target.value || null }))}
             />
@@ -1005,7 +1005,7 @@ export default function ProceduresPage() {
           <div className="md:col-span-2 lg:col-span-3">
             <label className="text-sm text-gray-800">Remarks</label>
             <textarea
-              className="border border-gray-300 rounded p-2 text-sm w-full min-h-[60px]"
+              className="border border-gray-300 rounded p-2 text-sm w-full min-h-[60px] text-gray-900"
               value={device.remarks ?? ''}
               onChange={e => setDevice(prev => ({ ...prev, remarks: e.target.value || null }))}
             />
