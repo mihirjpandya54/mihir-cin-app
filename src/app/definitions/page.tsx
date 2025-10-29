@@ -363,15 +363,30 @@ export default function DefinitionsPage() {
     const abs7 = peak7d ? Number((peak7d.value - baseVal).toFixed(3)) : null;
     const rel7 = peak7d ? Number((peak7d.value / baseVal).toFixed(3)) : null;
 
-    // urine
-    const startUrine = procTs;
-    const endUrine = procTs + 24 * HOURS;
-    const urineEntries = fluids
-      .map(f => ({ ...f, meta: rowTimestampFluidMeta(f) }))
-      .filter(f => f.meta.ts !== null && f.output_ml != null && (f.meta.ts as number) >= startUrine && (f.meta.ts as number) <= endUrine);
-    const urineTotal = urineEntries.reduce((s, x) => s + (x.output_ml ?? 0), 0);
-    const urineDataPresent = urineEntries.length > 0;
-    const urineLowAuto = urineDataPresent ? urineTotal < urineThreshold : null;
+  // ---------- Urine output (fixed logic) ----------
+/**
+ *  Handles both date-only and datetime entries.
+ *  Includes same-day date-only records OR anything within 0–24h (±12h buffer)
+ */
+const procDateOnly = new Date(procTs).toLocaleDateString('en-CA');
+
+const urineEntries = fluids
+  .map(f => ({ ...f, meta: rowTimestampFluidMeta(f) }))
+  .filter(f => f.output_ml != null && f.meta.ts !== null)
+  .filter(f => {
+    // Case 1: if fluid_date is date-only, match procedure date
+    if (f.meta.isDateOnly) {
+      const fluidDateOnly = new Date(f.meta.ts!).toLocaleDateString('en-CA');
+      return fluidDateOnly === procDateOnly;
+    }
+    // Case 2: if timestamped, include if within 0–24h (with ±12h tolerance)
+    const t = f.meta.ts!;
+    return t >= procTs - 12 * HOURS && t <= procTs + 24 * HOURS;
+  });
+
+const urineTotal = urineEntries.reduce((sum, x) => sum + (x.output_ml ?? 0), 0);
+const urineDataPresent = urineEntries.length > 0;
+const urineLowAuto = urineDataPresent ? urineTotal < urineThreshold : null; 
 
     // KDIGO
     const cond_abs48 = abs48 !== null && abs48 >= 0.3;
