@@ -85,16 +85,27 @@ function rowTimestampLabMeta(l: LabRow): { ts: number | null; isDateOnly: boolea
   }
 }
 
-function rowTimestampFluidMeta(f: FluidRow): { ts: number | null; isDateOnly: boolean } {
+/**
+ * Fluid meta: for date-only fluid_date we provide dayStart/dayEnd so callers can test interval overlap.
+ * Returns:
+ *  - ts: midday timestamp (for compatibility)
+ *  - isDateOnly: boolean
+ *  - dayStart/dayEnd: ms timestamps for the calendar day (if date-only)
+ */
+function rowTimestampFluidMeta(f: FluidRow): { ts: number | null; isDateOnly: boolean; dayStart?: number; dayEnd?: number } {
   try {
+    if (!f) return { ts: null, isDateOnly: false };
     if (f.fluid_date) {
-      if (f.fluid_date.includes('T')) {
-        const ts = new Date(f.fluid_date).getTime();
+      const s = String(f.fluid_date);
+      if (s.includes('T')) {
+        const ts = new Date(s).getTime();
         return { ts: Number.isFinite(ts) ? ts : null, isDateOnly: false };
       } else {
-        const midday = new Date(f.fluid_date + 'T12:00:00');
-        const ts = midday.getTime();
-        return { ts: Number.isFinite(ts) ? ts : null, isDateOnly: true };
+        // date-only -> full local calendar day [00:00:00, 23:59:59.999]
+        const dayStart = new Date(s + 'T00:00:00').getTime();
+        const dayEnd = dayStart + 24 * HOURS - 1;
+        const midday = dayStart + 12 * HOURS;
+        return { ts: Number.isFinite(midday) ? midday : null, isDateOnly: true, dayStart, dayEnd };
       }
     }
     if (f.inserted_at) {
@@ -105,6 +116,11 @@ function rowTimestampFluidMeta(f: FluidRow): { ts: number | null; isDateOnly: bo
   } catch {
     return { ts: null, isDateOnly: false };
   }
+}
+
+// small helper to test interval overlap
+function intervalsOverlap(aStart: number, aEnd: number, bStart: number, bEnd: number) {
+  return !(aEnd < bStart || aStart > bEnd);
 }
 
 // UI small helpers
@@ -276,9 +292,10 @@ export default function DefinitionsPage() {
     }
 
     // 2) try same-day date-only fallback (only if no strict pre-proc labs found)
-    const procLocalDate = localDateYMD(firstProcTs);
+    const procLocalDate = (ts: number) => new Date(ts).toLocaleDateString('en-CA');
+    const procLocal = procLocalDate(firstProcTs);
     const fallbackCandidates = labMeta
-      .filter(l => l.ts !== null && l.isDateOnly && (l.scr != null) && localDateYMD(l.ts as number) === procLocalDate)
+      .filter(l => l.ts !== null && l.isDateOnly && (l.scr != null) && procLocalDate(l.ts as number) === procLocal)
       .sort((a, b) => (b.ts as number) - (a.ts as number));
     if (fallbackCandidates.length) {
       const chosen = fallbackCandidates[0];
@@ -311,9 +328,28 @@ export default function DefinitionsPage() {
     if (!baseline) {
       const startU = procTs;
       const endU = procTs + 24 * HOURS;
+
+      // Build urine entries with overlap logic (date-only day intervals or precise timestamps)
       const urineEntries = fluids
         .map(f => ({ ...f, meta: rowTimestampFluidMeta(f) }))
-        .filter(f => f.meta.ts !== null && f.output_ml != null && (f.meta.ts as number) >= startU && (f.meta.ts as number) <= endU);
+        .filter(f => {
+          if (f.output_ml == null) return false;
+          const m = f.meta;
+          if (!m) return false;
+
+          // date-only day interval
+          if (m.isDateOnly && typeof m.dayStart === 'number' && typeof m.dayEnd === 'number') {
+            return intervalsOverlap(m.dayStart, m.dayEnd, startU, endU);
+          }
+
+          // exact timestamp
+          if (m.ts !== null) {
+            const t = m.ts;
+            return t >= startU && t <= endU;
+          }
+          return false;
+        });
+
       const urineTotal = urineEntries.reduce((s, x) => s + (x.output_ml ?? 0), 0);
       const urineDataPresent = urineEntries.length > 0;
       const urineLowAuto = urineDataPresent ? urineTotal < urineThreshold : null;
@@ -363,30 +399,30 @@ export default function DefinitionsPage() {
     const abs7 = peak7d ? Number((peak7d.value - baseVal).toFixed(3)) : null;
     const rel7 = peak7d ? Number((peak7d.value / baseVal).toFixed(3)) : null;
 
-  // ---------- Urine output (fixed logic) ----------
-/**
- *  Handles both date-only and datetime entries.
- *  Includes same-day date-only records OR anything within 0–24h (±12h buffer)
- */
-const procDateOnly = new Date(procTs).toLocaleDateString('en-CA');
+    // ---------- Urine: robust overlap logic ----------
+    const startUrine = procTs;
+    const endUrine = procTs + 24 * HOURS;
+    const urineEntries = fluids
+      .map(f => ({ ...f, meta: rowTimestampFluidMeta(f) }))
+      .filter(f => {
+        if (f.output_ml == null) return false;
+        const m = f.meta;
+        if (!m) return false;
 
-const urineEntries = fluids
-  .map(f => ({ ...f, meta: rowTimestampFluidMeta(f) }))
-  .filter(f => f.output_ml != null && f.meta.ts !== null)
-  .filter(f => {
-    // Case 1: if fluid_date is date-only, match procedure date
-    if (f.meta.isDateOnly) {
-      const fluidDateOnly = new Date(f.meta.ts!).toLocaleDateString('en-CA');
-      return fluidDateOnly === procDateOnly;
-    }
-    // Case 2: if timestamped, include if within 0–24h (with ±12h tolerance)
-    const t = f.meta.ts!;
-    return t >= procTs - 12 * HOURS && t <= procTs + 24 * HOURS;
-  });
+        if (m.isDateOnly && typeof m.dayStart === 'number' && typeof m.dayEnd === 'number') {
+          return intervalsOverlap(m.dayStart, m.dayEnd, startUrine, endUrine);
+        }
 
-const urineTotal = urineEntries.reduce((sum, x) => sum + (x.output_ml ?? 0), 0);
-const urineDataPresent = urineEntries.length > 0;
-const urineLowAuto = urineDataPresent ? urineTotal < urineThreshold : null; 
+        if (m.ts !== null) {
+          const t = m.ts;
+          return t >= startUrine && t <= endUrine;
+        }
+        return false;
+      });
+
+    const urineTotal = urineEntries.reduce((s, x) => s + (x.output_ml ?? 0), 0);
+    const urineDataPresent = urineEntries.length > 0;
+    const urineLowAuto = urineDataPresent ? urineTotal < urineThreshold : null;
 
     // KDIGO
     const cond_abs48 = abs48 !== null && abs48 >= 0.3;
