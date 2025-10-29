@@ -327,9 +327,12 @@ const urineEntries = fluids
     const fluidDate = new Date(f.meta.ts!).toLocaleDateString('en-CA');
     if (fluidDate !== procDate) return false;
 
-    // ✅ if timing column exists in Supabase (like “0–24 CAG” / “Pre PTCA”):
-    const timing = (f as any).timing?.toLowerCase?.() || '';
-    if (timing && !timing.includes(anchorType.toLowerCase())) return false;
+    // ✅ Try both 'timing' and 'timing_label' (your Supabase column name)
+const timing = (f as any).timing_label?.toLowerCase?.() 
+  || (f as any).timing?.toLowerCase?.() 
+  || '';
+
+if (timing && !timing.includes(anchorType.toLowerCase())) return false;
 
     // ✅ avoid double-counting same date rows
     if (seen.has(fluidDate)) return false;
