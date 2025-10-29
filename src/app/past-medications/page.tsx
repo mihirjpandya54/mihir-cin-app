@@ -197,12 +197,12 @@ export default function PastMedicationsPage() {
 
   return (
     <div className="min-h-screen bg-gray-100 p-6 flex flex-col items-center">
-      <h1 className="text-2xl font-bold mb-4 text-gray-800">💊 Past Medication History</h1>
+      <h1 className="text-2xl font-bold mb-4 text-gray-900">💊 Past Medication History</h1>
 
       {patientInfo && (
-        <div className="mb-4 text-lg font-semibold text-gray-800 bg-blue-50 border border-blue-300 rounded p-3 w-full max-w-xl text-center">
-          🧑 Patient: <span className="font-bold">{patientInfo.name}</span> — IPD:{" "}
-          <span className="font-mono">{patientInfo.ipd}</span>
+        <div className="mb-4 text-lg font-semibold text-gray-900 bg-blue-50 border border-blue-300 rounded p-3 w-full max-w-xl text-center">
+          🧑 Patient: <span className="font-bold text-gray-900">{patientInfo.name}</span> — IPD:{" "}
+          <span className="font-mono text-gray-900">{patientInfo.ipd}</span>
         </div>
       )}
 
@@ -222,32 +222,32 @@ export default function PastMedicationsPage() {
             placeholder="Medication Name"
             value={newMed.medication_name}
             onChange={(e) => setNewMed({ ...newMed, medication_name: e.target.value })}
-            className="border border-gray-400 text-gray-800 rounded p-2 w-full"
+            className="border border-gray-400 text-gray-900 rounded p-2 w-full"
           />
           <input
             type="text"
             placeholder="Dose"
             value={newMed.dose || ""}
             onChange={(e) => setNewMed({ ...newMed, dose: e.target.value })}
-            className="border border-gray-400 text-gray-800 rounded p-2 w-full"
+            className="border border-gray-400 text-gray-900 rounded p-2 w-full"
           />
           <input
             type="text"
             placeholder="Frequency"
             value={newMed.frequency || ""}
             onChange={(e) => setNewMed({ ...newMed, frequency: e.target.value })}
-            className="border border-gray-400 text-gray-800 rounded p-2 w-full"
+            className="border border-gray-400 text-gray-900 rounded p-2 w-full"
           />
-          <label className="block text-gray-800 font-semibold">Last Dose Taken</label>
+          <label className="block text-gray-900 font-semibold">Last Dose Taken</label>
           <input
             type="datetime-local"
             value={newMed.last_dose_taken || ""}
             onChange={(e) => setNewMed({ ...newMed, last_dose_taken: e.target.value })}
-            className="border border-gray-400 text-gray-800 rounded p-2 w-full"
+            className="border border-gray-400 text-gray-900 rounded p-2 w-full"
           />
 
           <div className="flex gap-4">
-            <label className="flex items-center gap-2">
+            <label className="flex items-center gap-2 text-gray-900">
               <input
                 type="checkbox"
                 checked={Boolean(newMed.continue_flag)}
@@ -255,7 +255,7 @@ export default function PastMedicationsPage() {
               />
               Continue
             </label>
-            <label className="flex items-center gap-2">
+            <label className="flex items-center gap-2 text-gray-900">
               <input
                 type="checkbox"
                 checked={Boolean(newMed.discontinue_flag)}
@@ -273,18 +273,18 @@ export default function PastMedicationsPage() {
             {saving ? "Saving..." : "Add Medication"}
           </button>
 
-          {message && <p className="text-center text-sm mt-2 text-gray-800">{message}</p>}
+          {message && <p className="text-center text-sm mt-2 text-gray-900">{message}</p>}
         </form>
       )}
 
       {medications.length > 0 && (
         <div className="bg-white p-4 rounded-lg shadow-md w-full max-w-2xl">
-          <h2 className="text-xl font-semibold mb-3 text-gray-800">📝 Existing Medications</h2>
+          <h2 className="text-xl font-semibold mb-3 text-gray-900">📝 Existing Medications</h2>
           <ul className="space-y-3">
             {medications.map((m) => (
               <li key={m.id} className="border-b pb-3">
                 <div className="flex justify-between items-center mb-2">
-                  <span className="font-bold text-gray-800">{m.medication_name}</span>
+                  <span className="font-bold text-gray-900">{m.medication_name}</span>
                   <button
                     type="button"
                     onClick={() => deleteMedication(m.id!)}
@@ -298,26 +298,26 @@ export default function PastMedicationsPage() {
                   type="text"
                   value={m.dose || ""}
                   onChange={(e) => updateMedication(m.id!, "dose", e.target.value)}
-                  className="border border-gray-300 rounded p-1 w-full mb-1"
+                  className="border border-gray-300 rounded p-1 w-full mb-1 text-gray-900"
                   placeholder="Dose"
                 />
                 <input
                   type="text"
                   value={m.frequency || ""}
                   onChange={(e) => updateMedication(m.id!, "frequency", e.target.value)}
-                  className="border border-gray-300 rounded p-1 w-full mb-1"
+                  className="border border-gray-300 rounded p-1 w-full mb-1 text-gray-900"
                   placeholder="Frequency"
                 />
                 <input
                   type="datetime-local"
                   value={m.last_dose_taken || ""}
                   onChange={(e) => updateMedication(m.id!, "last_dose_taken", e.target.value)}
-                  className="border border-gray-300 rounded p-1 w-full mb-2"
+                  className="border border-gray-300 rounded p-1 w-full mb-2 text-gray-900"
                 />
 
                 <div className="flex justify-between items-center">
                   <div className="flex gap-4">
-                    <label className="flex items-center gap-2">
+                    <label className="flex items-center gap-2 text-gray-900">
                       <input
                         type="checkbox"
                         checked={Boolean(m.continue_flag)}
@@ -325,7 +325,7 @@ export default function PastMedicationsPage() {
                       />
                       Continue
                     </label>
-                    <label className="flex items-center gap-2">
+                    <label className="flex items-center gap-2 text-gray-900">
                       <input
                         type="checkbox"
                         checked={Boolean(m.discontinue_flag)}
