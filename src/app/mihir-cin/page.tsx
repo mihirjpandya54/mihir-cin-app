@@ -13,11 +13,9 @@ const supabase: SupabaseClient = createClient(
 const HOURS = 1000 * 60 * 60;
 const clampNum = (n: any) => (n === null || n === undefined || Number.isNaN(Number(n)) ? null : Number(n));
 
-// Convert date-only "YYYY-MM-DD" => midday ISO local string
 function dateOnlyToMiddayTs(dateOnly: string | null): number | null {
   if (!dateOnly) return null;
   try {
-    // treat as local
     const dt = new Date(dateOnly + 'T12:00:00');
     const t = dt.getTime();
     return Number.isFinite(t) ? t : null;
@@ -26,16 +24,10 @@ function dateOnlyToMiddayTs(dateOnly: string | null): number | null {
   }
 }
 
-/**
- * Return metadata for a lab (scr/hb).
- * - lab.lab_date may be 'YYYY-MM-DD' (date-only) or 'YYYY-MM-DDTHH:MM:SSZ' (if stored that way)
- * - fallback to created_at timestamp if lab_date missing or invalid
- */
 function rowTimestampLabMeta(l: any): { ts: number | null; isDateOnly: boolean; dateOnlyStr?: string } {
   try {
     if (!l) return { ts: null, isDateOnly: false };
     if (l.lab_date) {
-      // lab_date in schema is "date" (no time) usually; but be robust if it contains 'T'
       if (String(l.lab_date).includes('T')) {
         const ts = new Date(l.lab_date).getTime();
         return { ts: Number.isFinite(ts) ? ts : null, isDateOnly: false };
@@ -76,29 +68,26 @@ function rowTimestampFluidMeta(f: any): { ts: number | null; isDateOnly: boolean
   }
 }
 
-// CKD-EPI 2009 approximate eGFR (assuming non-black race). Works with creatinine in mg/dL.
-// This is a reasonable fallback if egfr not present in lab row and you have age + sex.
+// CKD-EPI approximate (fallback)
 function computeEgfrCkdEpi(creatinineMgDl: number | null, ageYears: number | null, sex: 'Male' | 'Female' | 'Other' | null) {
   if (creatinineMgDl == null || ageYears == null || !sex) return null;
   const k = sex === 'Female' ? 0.7 : 0.9;
   const alpha = sex === 'Female' ? -0.329 : -0.411;
   const minVal = Math.min(creatinineMgDl / k, 1);
   const maxVal = Math.max(creatinineMgDl / k, 1);
-  // no race adjustment here (assume non-black)
   const sexFactor = sex === 'Female' ? 1.018 : 1.0;
   const ageFactor = Math.pow(0.993, ageYears);
-  const egfr = 142 * Math.pow(minVal, alpha) * Math.pow(maxVal, -1.209) * sexFactor * ageFactor; // CKD-EPI 2021-ish variant constant tuned for non-black (approx)
+  const egfr = 142 * Math.pow(minVal, alpha) * Math.pow(maxVal, -1.209) * sexFactor * ageFactor;
   return Number.isFinite(egfr) ? Math.round(egfr * 100) / 100 : null;
 }
 
-// format helper
 function fmt(n: number | null | undefined) {
   if (n === null || n === undefined) return '—';
   return typeof n === 'number' ? String(n) : String(n);
 }
 
 // ---------- Component ----------
-export default function MihirCinDefinition() {
+export default function MihirCinDefinition(): JSX.Element {
   // data
   const [patient, setPatient] = useState<any | null>(null);
   const [procedures, setProcedures] = useState<any[]>([]);
@@ -114,12 +103,11 @@ export default function MihirCinDefinition() {
   const [manualConfounder, setManualConfounder] = useState(false);
   const [adjudicatedBy, setAdjudicatedBy] = useState<string | null>(null);
 
-  // effect: load data for active patient
+  // load
   useEffect(() => {
     (async () => {
       setLoading(true);
       try {
-        // active_patient - fixed user id we use in your project
         const { data: active, error: e1 } = await supabase
           .from('active_patient')
           .select('patient_id')
@@ -128,12 +116,10 @@ export default function MihirCinDefinition() {
         if (e1) console.error('active_patient error', e1);
         const patientId = active?.patient_id;
         if (!patientId) {
-          console.warn('No active patient selected');
           setLoading(false);
           return;
         }
 
-        // patient_details
         const { data: p, error: e2 } = await supabase
           .from('patient_details')
           .select('id, patient_name, ipd_number, age, sex, admission_datetime, procedure_datetime_cag, procedure_datetime_ptca')
@@ -142,16 +128,15 @@ export default function MihirCinDefinition() {
         if (e2) console.error('patient fetch error', e2);
         setPatient(p ?? null);
 
-        // try to fetch a procedures_view if exists (convenience)
+        // procedures: try view, fallback to raw tables
         let procRows: any[] = [];
         const { data: pv, error: pvErr } = await supabase
           .from('procedures_view')
-          .select('id, patient_id, type, procedure_datetime')
+          .select('id, patient_id, type, procedure_datetime, contrast_volume_ml')
           .eq('patient_id', patientId);
-        if (!pvErr && pv) procRows = pv;
-
-        // fallback: angiography_raw, ptca_raw, poba_report, thrombus_aspiration_report
-        if (!procRows.length) {
+        if (!pvErr && pv && pv.length) {
+          procRows = pv;
+        } else {
           // angiography_raw
           const { data: ag } = await supabase
             .from('angiography_raw')
@@ -221,14 +206,12 @@ export default function MihirCinDefinition() {
           }
         }
 
-        // normalize and sort by datetime ascending
         procRows = (procRows || [])
           .filter((x: any) => x?.procedure_datetime)
           .map((r: any) => ({ ...r, procedure_datetime: new Date(r.procedure_datetime).toISOString() }))
           .sort((a: any, b: any) => new Date(a.procedure_datetime).getTime() - new Date(b.procedure_datetime).getTime());
         setProcedures(procRows);
 
-        // labs
         const { data: labData, error: labErr } = await supabase
           .from('lab_results')
           .select('*')
@@ -237,7 +220,6 @@ export default function MihirCinDefinition() {
         if (labErr) console.error('lab fetch error', labErr);
         setLabs((labData || []).map((r: any) => ({ ...r })));
 
-        // fluids
         const { data: fData, error: fErr } = await supabase
           .from('fluid_chart')
           .select('*')
@@ -246,7 +228,6 @@ export default function MihirCinDefinition() {
         if (fErr) console.error('fluid fetch error', fErr);
         setFluids((fData || []).map((r: any) => ({ ...r })));
 
-        // bp (bp_chart)
         const { data: bpData, error: bpErr } = await supabase
           .from('bp_chart')
           .select('*')
@@ -255,7 +236,6 @@ export default function MihirCinDefinition() {
         if (bpErr) console.error('bp fetch error', bpErr);
         setBpRows((bpData || []).map((r: any) => ({ ...r })));
 
-        // medications
         const { data: medData, error: medErr } = await supabase
           .from('medications')
           .select('*')
@@ -264,7 +244,6 @@ export default function MihirCinDefinition() {
         if (medErr) console.error('medications fetch error', medErr);
         setMeds((medData || []).map((r: any) => ({ ...r })));
 
-        // existing mihir row (if any)
         const { data: exist, error: existErr } = await supabase
           .from('mihir_cin_definition')
           .select('*')
@@ -272,8 +251,6 @@ export default function MihirCinDefinition() {
           .maybeSingle();
         if (existErr) console.error('existing mihir fetch error', existErr);
         setExisting(exist ?? null);
-
-        // initialize manual confounder & adjudicator if existing row
         if (exist) {
           setManualConfounder(Boolean(exist.sepsis_or_other_major_cause));
           setAdjudicatedBy(exist.adjudicated_by ?? null);
@@ -286,34 +263,33 @@ export default function MihirCinDefinition() {
     })();
   }, []);
 
-  // earliest procedure (anchor)
   const firstProcedure = useMemo(() => {
     return procedures && procedures.length ? procedures[0] : null;
   }, [procedures]);
 
-  // helper local date Y-M-D
   const localDateYMD = (ts: number) => new Date(ts).toLocaleDateString('en-CA');
 
-  // ---------- Baseline selection ----------
-  const baselineMeta = useMemo(() => {
+  // ---------- Baseline ----------
+  const baselineMeta: any = useMemo(() => {
     if (!firstProcedure || !labs?.length) return null;
     const firstProcTs = new Date(firstProcedure.procedure_datetime).getTime();
     if (!Number.isFinite(firstProcTs)) return null;
 
-    // prepare lab meta with timestamps
-    const labMeta = labs.map(l => {
-      const meta = rowTimestampLabMeta(l);
-      return { ...l, ts: meta.ts, isDateOnly: meta.isDateOnly, dateOnlyStr: meta.dateOnlyStr ?? null };
-    }).filter((l:any) => l.scr != null);
+    const labMeta = labs
+      .map(l => {
+        const meta = rowTimestampLabMeta(l);
+        return { ...l, ts: meta.ts, isDateOnly: meta.isDateOnly, dateOnlyStr: meta.dateOnlyStr ?? null };
+      })
+      .filter((l: any) => l.scr != null && l.ts !== null);
 
-    // strict pre-procedure labs: ts < firstProcTs; exclude date-only labs that have same local date (ambiguous)
+    // strict pre-procedure labs
     const strictCandidates = labMeta
       .filter((l: any) => l.ts !== null && l.ts < firstProcTs)
       .filter((l: any) => {
         if (l.isDateOnly) {
           const labLocal = localDateYMD(l.ts);
           const procLocal = localDateYMD(firstProcTs);
-          if (labLocal === procLocal) return false; // ambiguous -> exclude
+          if (labLocal === procLocal) return false;
         }
         return true;
       })
@@ -323,9 +299,8 @@ export default function MihirCinDefinition() {
       const chosen = strictCandidates[0];
       const chosenScr = clampNum(chosen.scr);
       const chosenTs = chosen.ts as number;
-      // compute stability (7d)
       const sevenBefore = chosenTs - 7 * 24 * HOURS;
-      const earlier = labMeta.filter((l: any) => l.ts !== null && l.ts >= sevenBefore && l.ts < chosenTs).sort((a:any,b:any)=>b.ts - a.ts);
+      const earlier = labMeta.filter((l: any) => l.ts !== null && l.ts >= sevenBefore && l.ts < chosenTs).sort((a: any, b: any) => b.ts - a.ts);
       let stable = true;
       for (const e of earlier) {
         const earlierScr = clampNum(e.scr);
@@ -339,7 +314,7 @@ export default function MihirCinDefinition() {
 
     // fallback: same-day date-only if none strict
     const procLocalDate = localDateYMD(firstProcTs);
-    const fallbackCandidates = labMeta.filter((l:any) => l.ts !== null && l.isDateOnly && localDateYMD(l.ts) === procLocalDate).sort((a:any,b:any)=>b.ts - a.ts);
+    const fallbackCandidates = labMeta.filter((l: any) => l.ts !== null && l.isDateOnly && localDateYMD(l.ts) === procLocalDate).sort((a: any, b: any) => b.ts - a.ts);
     if (fallbackCandidates.length) {
       const chosen = fallbackCandidates[0];
       return { value: clampNum(chosen.scr), ts: chosen.ts, dateLabel: chosen.lab_date ?? chosen.created_at ?? null, stable: false, fallback: true };
@@ -348,23 +323,25 @@ export default function MihirCinDefinition() {
     return null;
   }, [firstProcedure, labs]);
 
-  // ---------- 0-24h SCr ----------
-  const scr24Meta = useMemo(() => {
+  // ---------- scr 0-24h (PICK LATEST WITHIN WINDOW) ----------
+  const scr24Meta: any = useMemo(() => {
     if (!firstProcedure || !labs?.length) return null;
     const procTs = new Date(firstProcedure.procedure_datetime).getTime();
     const endTs = procTs + 24 * HOURS;
     const labMeta = labs.map(l => ({ ...l, meta: rowTimestampLabMeta(l) }));
-    // pick earliest lab with ts within [procTs, endTs]
-    const candidates = labMeta.filter((l:any) => l.meta.ts !== null && l.scr != null && l.meta.ts >= procTs && l.meta.ts <= endTs)
-      .sort((a:any,b:any) => a.meta.ts - b.meta.ts);
+    // pick latest lab with ts within [procTs, endTs]
+    const candidates = labMeta
+      .filter((l: any) => l.meta.ts !== null && l.scr != null && l.meta.ts >= procTs && l.meta.ts <= endTs)
+      .sort((a: any, b: any) => b.meta.ts - a.meta.ts); // latest first
     if (candidates.length) {
       const chosen = candidates[0];
       return { value: clampNum(chosen.scr), ts: chosen.meta.ts, dateLabel: chosen.lab_date ?? chosen.created_at ?? null };
     }
-    // if none found, try date-only labs where lab_date equals procedure date (ambiguous; accept as fallback)
+    // fallback: date-only labs where lab_date equals procedure date (pick latest)
     const procLocal = new Date(procTs).toLocaleDateString('en-CA');
-    const fallback = labMeta.filter((l:any) => l.meta.ts !== null && l.scr != null && l.meta.isDateOnly && localDateYMD(l.meta.ts) === procLocal)
-      .sort((a:any,b:any)=>a.meta.ts - b.meta.ts);
+    const fallback = labMeta
+      .filter((l: any) => l.meta.ts !== null && l.scr != null && l.meta.isDateOnly && localDateYMD(l.meta.ts) === procLocal)
+      .sort((a: any, b: any) => b.meta.ts - a.meta.ts);
     if (fallback.length) {
       const chosen = fallback[0];
       return { value: clampNum(chosen.scr), ts: chosen.meta.ts, dateLabel: chosen.lab_date ?? chosen.created_at ?? null, fallback: true };
@@ -372,98 +349,109 @@ export default function MihirCinDefinition() {
     return null;
   }, [firstProcedure, labs]);
 
-  // ---------- urine 0-24h ----------
-  const urine24 = useMemo(() => {
+  // ---------- urine 0-24h (prefer timing_label or fluid_date same day) ----------
+  const urine24: any = useMemo(() => {
     if (!firstProcedure || !fluids?.length) return { totalMl: null, dataPresent: false };
     const procTs = new Date(firstProcedure.procedure_datetime).getTime();
     const endTs = procTs + 24 * HOURS;
-    const fluidMeta = fluids.map((f:any) => ({ ...f, meta: rowTimestampFluidMeta(f) }));
-    const entries = fluidMeta.filter((f:any) => f.meta.ts !== null && f.output_ml != null && f.meta.ts >= procTs && f.meta.ts <= endTs);
-    const total = entries.reduce((s:number, x:any) => s + (clampNum(x.output_ml) || 0), 0);
-    return { totalMl: total, dataPresent: entries.length > 0 };
+    const fluidMeta = fluids.map((f: any) => ({ ...f, meta: rowTimestampFluidMeta(f) }));
+
+    // prefer explicit 0-24 labeled rows
+    const labeled = fluidMeta.filter((f: any) => {
+      try {
+        const lbl = (f.timing_label ?? '').toString().toLowerCase();
+        if (lbl.includes('0-24') || lbl.includes('0–24') || lbl.includes('0 - 24')) return true;
+        return false;
+      } catch { return false; }
+    });
+
+    if (labeled.length) {
+      const total = labeled.reduce((s: number, x: any) => s + (clampNum(x.output_ml) || 0), 0);
+      return { totalMl: total, dataPresent: true, source: 'timing_label' };
+    }
+
+    // else prefer fluid_date = procedure local date (date-only rows)
+    const procLocal = new Date(procTs).toLocaleDateString('en-CA');
+    const dateRows = fluidMeta.filter((f: any) => f.meta.ts !== null && f.meta.isDateOnly && localDateYMD(f.meta.ts) === procLocal);
+    if (dateRows.length) {
+      const total = dateRows.reduce((s: number, x: any) => s + (clampNum(x.output_ml) || 0), 0);
+      return { totalMl: total, dataPresent: true, source: 'fluid_date' };
+    }
+
+    // last resort: sum any entries with timestamps within procTs..endTs (non-date-only)
+    const tsRows = fluidMeta.filter((f: any) => f.meta.ts !== null && !f.meta.isDateOnly && f.meta.ts >= procTs && f.meta.ts <= endTs);
+    if (tsRows.length) {
+      const total = tsRows.reduce((s: number, x: any) => s + (clampNum(x.output_ml) || 0), 0);
+      return { totalMl: total, dataPresent: true, source: 'timestamp' };
+    }
+
+    return { totalMl: null, dataPresent: false };
   }, [firstProcedure, fluids]);
 
-  // ---------- contrast volume (use earliest procedure) ----------
+  // ---------- contrast volume (earliest procedure) ----------
   const contrastVolume = useMemo(() => {
     if (!firstProcedure) return null;
-    // try contrast_volume_ml from procedure object if present
-    const v = firstProcedure.contrast_volume_ml ?? firstProcedure.contrast_volume ?? firstProcedure.contrast_volume_ml ?? null;
+    const v = (firstProcedure.contrast_volume_ml ?? firstProcedure.contrast_volume ?? null);
     return clampNum(v);
   }, [firstProcedure]);
 
-  // ---------- eGFR (baseline) ----------
-  const egfrBaseline = useMemo(() => {
-    // try to get egfr from baseline lab row itself (if column existed)
+  // ---------- egfr baseline ----------
+  const egfrBaseline: any = useMemo(() => {
     if (!baselineMeta) return null;
-    // find the lab row that gave baseline
+    // try to find lab row used as baseline by matching ts or dateLabel
     const candidate = labs.find(l => {
       const meta = rowTimestampLabMeta(l);
       if (meta.ts === null) return false;
-      // approximate match by value and date
       const scrVal = clampNum(l.scr);
-      if (scrVal == null) return false;
-      if (Math.abs(scrVal - (baselineMeta.value ?? 0)) < 0.0001) return true;
-      // fallback: match by date string if provided
+      if (scrVal != null && baselineMeta.value != null && Math.abs(scrVal - baselineMeta.value) < 0.0001) return true;
       if (baselineMeta.dateLabel && l.lab_date && String(l.lab_date) === String(baselineMeta.dateLabel)) return true;
+      // match by timestamp closeness (within 1 second)
+      if (baselineMeta.ts && meta.ts && Math.abs(baselineMeta.ts - meta.ts) < 2000) return true;
       return false;
     });
-    // if candidate has egfr column, use it (some systems may have egfr)
     if (candidate && candidate.egfr) return clampNum(candidate.egfr);
-    // else compute using CKD-EPI with patient age/sex if available
     const creat = baselineMeta.value ?? null;
     const age = patient?.age ?? null;
     const sex = patient?.sex ?? null;
     if (creat == null) return null;
-    const computed = computeEgfrCkdEpi(creat, age ?? null, sex ?? null);
-    return computed;
+    return computeEgfrCkdEpi(creat, age ?? null, sex ?? null);
   }, [baselineMeta, labs, patient]);
 
   // ---------- hemodynamic insult ----------
-  const hemodynamicInsult = useMemo(() => {
+  const hemodynamicInsult: any = useMemo(() => {
     if (!firstProcedure) return { flag: null, reason: null, mapMin: null, vasopressorFound: null };
     const procTs = new Date(firstProcedure.procedure_datetime).getTime();
-    // find bp rows with timing_label containing '0-24' or '0–24' OR bp_date equal to procedure local date
-    const candidates = bpRows.filter((b:any) => {
+
+    const candidates = bpRows.filter((b: any) => {
       try {
         if (!b) return false;
         const label = (b.timing_label ?? '').toString().toLowerCase();
         if (label.includes('0-24') || label.includes('0–24') || label.includes('0 - 24')) return true;
-        // fallback: match bp_date to procedure date
-        const bpDate = b.bp_date;
-        if (bpDate) {
-          const bpTs = dateOnlyToMiddayTs(String(bpDate));
-          if (bpTs) {
-            const sameDay = localDateYMD(bpTs) === localDateYMD(procTs);
-            if (sameDay) return true;
-          }
+        if (b.bp_date) {
+          const bpTs = dateOnlyToMiddayTs(String(b.bp_date));
+          if (bpTs) return localDateYMD(bpTs) === localDateYMD(procTs);
         }
         return false;
-      } catch {
-        return false;
-      }
+      } catch { return false; }
     });
-    let mapMin: number | null = null;
-    if (candidates.length) {
-      const mins = candidates
-        .map((c: any) => clampNum(c.map_min))
-        .filter((v: number | null): v is number => v !== null);
 
-      if (mins.length > 0) {
-        mapMin = Math.min(...mins);
-      }
-    }
+    const mins = candidates
+      .map((c: any) => clampNum((c as any).map_min ?? (c as any).mapMin ?? (c as any).map_minimum ?? null))
+      .filter((v: number | null): v is number => v !== null);
+
+    let mapMin: number | null = null;
+    if (mins.length > 0) mapMin = Math.min(...mins);
 
     const mapInsult = mapMin !== null ? mapMin < 65 : false;
 
-    // vasopressor check: medications with is_vasopressor_inotrope = true and med_date within [procDate, procDate OR next day]
     const procLocal = new Date(procTs).toLocaleDateString('en-CA');
-    const procNextLocal = new Date(procTs + 24*HOURS).toLocaleDateString('en-CA');
-    const vasopressFound = meds.some((m:any) => {
+    const procNextLocal = new Date(procTs + 24 * HOURS).toLocaleDateString('en-CA');
+    const vasopressFound = meds.some((m: any) => {
       try {
         const d = m.med_date ? String(m.med_date) : null;
         if (!d) return false;
         if ((d === procLocal) || (d === procNextLocal)) {
-          if (m.is_vasopressor_inotrope) return true;
+          return Boolean(m.is_vasopressor_inotrope);
         }
         return false;
       } catch {
@@ -476,55 +464,66 @@ export default function MihirCinDefinition() {
   }, [firstProcedure, bpRows, meds]);
 
   // ---------- bleeding check ----------
-  const bleedingCheck = useMemo(() => {
-    if (!baselineMeta) return { major: null, baselineHb: null, hb24: null, drop: null };
-    // find baseline hb row (similar matching approach)
-    const baseLab = labs.map(l => ({ ...l, meta: rowTimestampLabMeta(l) }))
-      .filter((l:any) => l.meta.ts !== null)
-      .sort((a:any,b:any) => b.meta.ts - a.meta.ts)
-      .find((l:any) => l.meta.ts < (baselineMeta.ts ?? Infinity) && l.hb != null);
-    // fallback: same-day date only
-    const baselineHb = baseLab ? clampNum(baseLab.hb) : null;
-
-    // 0-24h hb
-    const scr24 = scr24Meta;
-    const procTs = firstProcedure ? new Date(firstProcedure.procedure_datetime).getTime() : null;
-    let hb24: number | null = null;
-    if (procTs) {
-      const endTs = procTs + 24 * HOURS;
+  const bleedingCheck: any = useMemo(() => {
+    if (!firstProcedure) return { major: null, baselineHb: null, hb24: null, drop: null };
+    // baseline Hb: try to get from the baseline lab row chosen earlier
+    let baselineHb: number | null = null;
+    if (baselineMeta?.ts) {
+      const matched = labs.map(l => ({ ...l, meta: rowTimestampLabMeta(l) }))
+        .find((l: any) => l.meta.ts !== null && Math.abs((l.meta.ts ?? 0) - (baselineMeta.ts ?? 0)) < 2000 && l.hb != null);
+      if (matched) baselineHb = clampNum(matched.hb);
+    }
+    if (baselineHb == null) {
+      // fallback: most recent hb before baselineMeta.ts
       const candidate = labs.map(l => ({ ...l, meta: rowTimestampLabMeta(l) }))
-        .filter((l:any) => l.meta.ts !== null && l.meta.ts >= procTs && l.meta.ts <= endTs && l.hb != null)
-        .sort((a:any,b:any)=>a.meta.ts - b.meta.ts)[0];
-      if (candidate) hb24 = clampNum(candidate.hb);
-      // fallback: date-only lab matching same procedure local date
-      if (hb24 == null) {
-        const procLocal = new Date(procTs).toLocaleDateString('en-CA');
-        const fallback = labs.map(l => ({ ...l, meta: rowTimestampLabMeta(l) }))
-          .filter((l:any) => l.meta.ts !== null && l.meta.isDateOnly && localDateYMD(l.meta.ts) === procLocal && l.hb != null)
-          .sort((a:any,b:any)=>a.meta.ts - b.meta.ts)[0];
-        if (fallback) hb24 = clampNum(fallback.hb);
-      }
+        .filter((l: any) => l.meta.ts !== null && l.hb != null && (baselineMeta?.ts ? l.meta.ts < baselineMeta.ts : true))
+        .sort((a: any, b: any) => b.meta.ts - a.meta.ts)[0];
+      if (candidate) baselineHb = clampNum(candidate.hb);
+    }
+
+    const procTs = new Date(firstProcedure.procedure_datetime).getTime();
+    const endTs = procTs + 24 * HOURS;
+    // pick latest hb within window
+    const within = labs.map(l => ({ ...l, meta: rowTimestampLabMeta(l) }))
+      .filter((l: any) => l.meta.ts !== null && l.hb != null && l.meta.ts >= procTs && l.meta.ts <= endTs)
+      .sort((a: any, b: any) => b.meta.ts - a.meta.ts);
+    let hb24: number | null = null;
+    if (within.length) hb24 = clampNum(within[0].hb);
+    // fallback: date-only equal to proc date
+    if (hb24 == null) {
+      const procLocal = new Date(procTs).toLocaleDateString('en-CA');
+      const fallback = labs.map(l => ({ ...l, meta: rowTimestampLabMeta(l) }))
+        .filter((l: any) => l.meta.ts !== null && l.meta.isDateOnly && localDateYMD(l.meta.ts) === procLocal && l.hb != null)
+        .sort((a: any, b: any) => b.meta.ts - a.meta.ts)[0];
+      if (fallback) hb24 = clampNum(fallback.hb);
     }
 
     const drop = (baselineHb != null && hb24 != null) ? Number(((baselineHb ?? 0) - (hb24 ?? 0)).toFixed(2)) : null;
     const major = drop !== null ? (drop >= 2.0) : null;
-
     return { major, baselineHb, hb24, drop };
-  }, [baselineMeta, labs, scr24Meta, firstProcedure]);
+  }, [baselineMeta, labs, firstProcedure]);
 
   // ---------- oliguria check ----------
-  const oliguriaCheck = useMemo(() => {
-    // assume weight default 70 kg (user agreed)
+  const oliguriaCheck: any = useMemo(() => {
     const weightKg = 70;
-    const threshold = 0.5 * weightKg * 24; // 840 mL / 24h
-    const total = urine24.totalMl;
+    const threshold = 0.5 * weightKg * 24; // 840 mL
+    const total = urine24?.totalMl ?? null;
     if (total === null) return { oliguria: null, totalMl: null, threshold };
     const olig = total < threshold;
     return { oliguria: olig, totalMl: total, threshold };
-  }, [urine24]);
+  }, [/* depends on urine24 - declared below, so we'll reference urine24 via closure */]);
 
-  // ---------- contrast/eGFR ratio ----------
-  const contrastEgfr = useMemo(() => {
+  // Because oliguriaCheck used urine24, we recalc via wrapping variable:
+  const oliguriaCheckFinal = useMemo(() => {
+    const weightKg = 70;
+    const threshold = 0.5 * weightKg * 24;
+    const total = urine24?.totalMl ?? null;
+    if (total === null) return { oliguria: null, totalMl: null, threshold };
+    return { oliguria: total < threshold, totalMl: total, threshold };
+  }, [/* urine24 included next */]);
+
+  // ---------- contrast/egfr ----------
+  const contrastEgfr: any = useMemo(() => {
     if (contrastVolume == null || egfrBaseline == null) return { ratio: null, high: null };
     if (egfrBaseline === 0) return { ratio: null, high: null };
     const r = Number((contrastVolume / egfrBaseline).toFixed(3));
@@ -532,23 +531,19 @@ export default function MihirCinDefinition() {
     return { ratio: r, high };
   }, [contrastVolume, egfrBaseline]);
 
-  // ---------- confounders (auto) ----------
-  const confoundersAuto = useMemo(() => {
+  // ---------- confoundersAuto ----------
+  const confoundersAuto: any = useMemo(() => {
     if (!firstProcedure) return { nephrotoxins: null, repeatContrast: null, any: null };
     const procTs = new Date(firstProcedure.procedure_datetime).getTime();
-    // nephrotoxins: any medication with is_nephrotoxic true within 0-24h
     const procLocal = new Date(procTs).toLocaleDateString('en-CA');
-    const procNextLocal = new Date(procTs + 24*HOURS).toLocaleDateString('en-CA');
-    const nephroFound = meds.some((m:any) => {
+    const procNextLocal = new Date(procTs + 24 * HOURS).toLocaleDateString('en-CA');
+    const nephroFound = meds.some((m: any) => {
       const d = m.med_date ? String(m.med_date) : null;
       if (!d) return false;
-      if ((d === procLocal) || (d === procNextLocal)) {
-        return Boolean(m.is_nephrotoxic);
-      }
+      if ((d === procLocal) || (d === procNextLocal)) return Boolean(m.is_nephrotoxic);
       return false;
     });
-    // repeat contrast: another procedure within 72h after first
-    const repeat = procedures.some((pr:any, idx:number) => {
+    const repeat = procedures.some((pr: any, idx: number) => {
       if (idx === 0) return false;
       const ts = new Date(pr.procedure_datetime).getTime();
       return ts <= (procTs + 72 * HOURS);
@@ -557,47 +552,37 @@ export default function MihirCinDefinition() {
     return { nephrotoxins: nephroFound, repeatContrast: repeat, any };
   }, [firstProcedure, meds, procedures]);
 
-  // ---------- Final Mihir CIN logic ----------
-  const finalResult = useMemo(() => {
-    // need baseline and scr24 to calculate deltas; but we also support composite (scr>=0.10 + supporting param)
+  // ---------- Final logic ----------
+  const finalResult: any = useMemo(() => {
     const base = baselineMeta?.value ?? null;
     const scr24 = scr24Meta?.value ?? null;
     if (!firstProcedure) return { canAssess: false, reason: 'no procedure' };
-
-    // within_24h true if we have at least one source (baseline + scr24) computed in that window
     const within24h = true;
-
-    let absoluteDelta = null;
-    let relativeDelta = null;
+    let absoluteDelta: number | null = null;
+    let relativeDelta: number | null = null;
     if (base != null && scr24 != null) {
       absoluteDelta = Number((scr24 - base).toFixed(3));
       if (base !== 0) relativeDelta = Number((scr24 / base).toFixed(3));
     }
 
-    // supporting flags
-    const olig = oliguriaCheck.oliguria === true;
+    const olig = oliguriaCheckFinal.oliguria === true;
     const highContrast = contrastEgfr.high === true;
     const hemo = hemodynamicInsult.flag === true;
     const bleed = bleedingCheck.major === true;
 
-    // main rules
     let mihir_flag = false;
     let category: 'Definite' | 'Possible' | 'Negative' | 'Indeterminate' = 'Indeterminate';
 
-    // Major criterion
     if (absoluteDelta !== null && absoluteDelta >= 0.30) {
       mihir_flag = true;
     } else if (absoluteDelta !== null && absoluteDelta >= 0.10) {
-      // need >=1 supporting
       const supportingCount = [olig, highContrast, hemo, bleed].filter(Boolean).length;
       if (supportingCount >= 1) mihir_flag = true;
     } else {
-      // Δ < 0.10 -> check maybe composite can't be applied
       mihir_flag = false;
     }
 
     if (mihir_flag) {
-      // confounders: either manual OR auto
       const confAuto = confoundersAuto.any === true;
       const conf = manualConfounder || confAuto;
       category = conf ? 'Possible' : 'Definite';
@@ -625,106 +610,99 @@ export default function MihirCinDefinition() {
       mihir_flag,
       category
     };
-  }, [baselineMeta, scr24Meta, oliguriaCheck, contrastEgfr, hemodynamicInsult, bleedingCheck, confoundersAuto, manualConfounder, firstProcedure, urine24, egfrBaseline, contrastVolume]);
+  }, [baselineMeta, scr24Meta, urine24, contrastVolume, egfrBaseline, contrastEgfr, hemodynamicInsult, bleedingCheck, confoundersAuto, manualConfounder, firstProcedure, oliguriaCheckFinal]);
 
-  // ---------- Safe wrapper to avoid TS 'possibly undefined' in JSX ----------
-  // Keep as `any` to avoid changing logic; this only provides defaults for rendering.
+  // safe wrapper for JSX
   const safeFinal: any = {
     ...(finalResult ?? {}),
     details: (finalResult?.details ?? {}),
     supporting: (finalResult?.supporting ?? {})
   };
 
-  // ---------- Save function (insert or update) ----------
- // ---------- Save function (insert or update) ----------
-async function saveToSupabase() {
-  if (!patient || !firstProcedure) {
-    alert('No patient or procedure found.');
-    return;
-  }
-  if (!finalResult?.canAssess) {
-    alert('Not assessable yet — missing data.');
-    return;
-  }
-
-  setSaving(true);
-  try {
-    const row: any = {
-      patient_id: patient.id,
-      mihir_cin_flag: finalResult.mihir_flag ?? null,
-      mihir_cin_category: finalResult.category ?? null,
-      absolute_scr_increase_24h: finalResult.absoluteDelta ?? null,
-      relative_scr_increase_24h: finalResult.relativeDelta ?? null,
-      oliguria_24h: finalResult.supporting?.olig ?? null,
-      contrast_egfr_ratio: finalResult.details?.contrastEgfr?.ratio ?? null,
-      high_contrast_burden: finalResult.supporting?.highContrast ?? null,
-      hemodynamic_instability_24h: finalResult.supporting?.hemo ?? null,
-      major_bleeding_24h: finalResult.supporting?.bleed ?? null,
-      sepsis_or_other_major_cause:
-        manualConfounder || (finalResult.details?.confoundersAuto?.any ?? false),
-      within_24h: true,
-      adjudicated_by: adjudicatedBy ?? null,
-      calculated_at: new Date().toISOString(),
-      baseline_scr: baselineMeta?.value ?? null,
-      scr_24h: scr24Meta?.value ?? null
-    };
-
-    // check existing
-    const { data: existingRows, error: selErr } = await supabase
-      .from('mihir_cin_definition')
-      .select('*')
-      .eq('patient_id', patient.id);
-
-    if (selErr) {
-      console.error('select existing error', selErr);
-      alert('Save failed (select). See console.');
-      setSaving(false);
+  // ---------- Save function ----------
+  async function saveToSupabase() {
+    if (!patient || !firstProcedure) {
+      alert('No patient or procedure found.');
+      return;
+    }
+    if (!finalResult?.canAssess) {
+      alert('Not assessable yet — missing data.');
       return;
     }
 
-    if (existingRows && existingRows.length > 0) {
-      // update first existing row
-      const idToUpdate = existingRows[0].id;
-      const { error: upErr } = await supabase
-        .from('mihir_cin_definition')
-        .update(row)
-        .eq('id', idToUpdate);
+    setSaving(true);
+    try {
+      const row: any = {
+        patient_id: patient.id,
+        mihir_cin_flag: finalResult.mihir_flag ?? null,
+        mihir_cin_category: finalResult.category ?? null,
+        absolute_scr_increase_24h: finalResult.absoluteDelta ?? null,
+        relative_scr_increase_24h: finalResult.relativeDelta ?? null,
+        oliguria_24h: finalResult.supporting?.olig ?? null,
+        contrast_egfr_ratio: finalResult.details?.contrastEgfr?.ratio ?? null,
+        high_contrast_burden: finalResult.supporting?.highContrast ?? null,
+        hemodynamic_instability_24h: finalResult.supporting?.hemo ?? null,
+        major_bleeding_24h: finalResult.supporting?.bleed ?? null,
+        sepsis_or_other_major_cause: manualConfounder || (finalResult.details?.confoundersAuto?.any ?? false),
+        within_24h: true,
+        adjudicated_by: adjudicatedBy ?? null,
+        calculated_at: new Date().toISOString(),
+        baseline_scr: baselineMeta?.value ?? null,
+        scr_24h: scr24Meta?.value ?? null
+      };
 
-      if (upErr) {
-        console.error('update error', upErr);
-        alert('Save failed (update). See console.');
-      } else {
-        const { data: fresh } = await supabase
+      const { data: existingRows, error: selErr } = await supabase
+        .from('mihir_cin_definition')
+        .select('*')
+        .eq('patient_id', patient.id);
+
+      if (selErr) {
+        console.error('select existing error', selErr);
+        alert('Save failed (select). See console.');
+        setSaving(false);
+        return;
+      }
+
+      if (existingRows && existingRows.length > 0) {
+        const idToUpdate = existingRows[0].id;
+        const { error: upErr } = await supabase
           .from('mihir_cin_definition')
-          .select('*')
-          .eq('patient_id', patient.id);
-        setExisting((fresh && fresh[0]) ?? null);
-        alert('Saved (updated) ✅');
-      }
-    } else {
-      // insert new row
-      const { error: insErr, data: insData } = await supabase
-        .from('mihir_cin_definition')
-        .insert(row)
-        .select()
-        .single();
+          .update(row)
+          .eq('id', idToUpdate);
 
-      if (insErr) {
-        console.error('insert error', insErr);
-        alert('Save failed (insert). See console.');
+        if (upErr) {
+          console.error('update error', upErr);
+          alert('Save failed (update). See console.');
+        } else {
+          const { data: fresh } = await supabase
+            .from('mihir_cin_definition')
+            .select('*')
+            .eq('patient_id', patient.id);
+          setExisting((fresh && fresh[0]) ?? null);
+          alert('Saved (updated) ✅');
+        }
       } else {
-        setExisting(insData);
-        alert('Saved (inserted) ✅');
-      }
-    }
-  } catch (err: any) {
-    console.error('save error', err);
-    alert(`Save failed — ${err.message ?? 'check console'}`);
-  } finally {
-    setSaving(false);
-  }
-}
+        const { error: insErr, data: insData } = await supabase
+          .from('mihir_cin_definition')
+          .insert(row)
+          .select()
+          .single();
 
+        if (insErr) {
+          console.error('insert error', insErr);
+          alert('Save failed (insert). See console.');
+        } else {
+          setExisting(insData);
+          alert('Saved (inserted) ✅');
+        }
+      }
+    } catch (err: any) {
+      console.error('save error', err);
+      alert(`Save failed — ${err?.message ?? 'check console'}`);
+    } finally {
+      setSaving(false);
+    }
+  }
 
   // ---------- Render ----------
   if (loading) {
@@ -764,15 +742,15 @@ async function saveToSupabase() {
 
               <div className="mt-2">
                 <strong>Urine (0–24 h):</strong>
-                <div className="text-sm ml-2">Total: {urine24.totalMl ?? 'No data'} mL — Threshold: {oliguriaCheck.threshold} mL — <span className={oliguriaCheck.oliguria ? 'text-green-800 font-semibold' : 'text-gray-900'}>{oliguriaCheck.oliguria ? 'OLIGURIA' : (urine24.totalMl === null ? 'No data' : 'OK')}</span></div>
+                <div className="text-sm ml-2">Total: {urine24.totalMl ?? 'No data'} mL — Threshold: {oliguriaCheckFinal.threshold} mL — <span className={oliguriaCheckFinal.oliguria ? 'text-green-800 font-semibold' : 'text-gray-900'}>{oliguriaCheckFinal.oliguria ? 'OLIGURIA' : (urine24.totalMl === null ? 'No data' : 'OK')}</span></div>
               </div>
 
               <div className="mt-2">
                 <strong>Contrast:</strong>
-               <div className="text-sm ml-2">
-  Volume (earliest proc): {contrastVolume ?? '—'} mL — eGFR (baseline): {egfrBaseline ?? '—'} — ratio: {safeFinal.details?.contrastEgfr?.ratio ?? '—'} {safeFinal.supporting?.highContrast ? <span className="text-green-800 font-semibold"> (HIGH)</span> : ''}
-</div>
-
+                <div className="text-sm ml-2">
+                  Volume (earliest proc): {contrastVolume ?? '—'} mL — eGFR (baseline): {egfrBaseline ?? '—'} — ratio: {safeFinal.details?.contrastEgfr?.ratio ?? '—'} {safeFinal.supporting?.highContrast ? <span className="text-green-800 font-semibold"> (HIGH)</span> : ''}
+                </div>
+              </div>
 
               <div className="mt-2">
                 <strong>Hemodynamics:</strong>
@@ -788,7 +766,6 @@ async function saveToSupabase() {
                 <strong>Auto confounders:</strong>
                 <div className="text-sm ml-2">Nephrotoxins in 0–24h: {safeFinal.details?.confoundersAuto?.nephrotoxins ? 'Yes' : 'No'} — Repeat contrast in 72h: {safeFinal.details?.confoundersAuto?.repeatContrast ? 'Yes' : 'No'}</div>
               </div>
-
             </div>
           </div>
 
@@ -841,9 +818,22 @@ async function saveToSupabase() {
           </div>
         </div>
 
-                    
-      </div>  
+        {/* Debug collapsed by default — remove or hide in production */}
+        <details className="bg-white rounded shadow p-4 mb-8">
+          <summary className="cursor-pointer text-sm font-medium">Show calculation debug (timestamps, matched rows)</summary>
+          <div className="mt-3 text-xs text-gray-800 space-y-2">
+            <div><strong>Procedures loaded:</strong> {procedures.length}</div>
+            <div><strong>Baseline meta:</strong> {baselineMeta ? JSON.stringify(baselineMeta) : '—'}</div>
+            <div><strong>scr24 meta:</strong> {scr24Meta ? JSON.stringify(scr24Meta) : '—'}</div>
+            <div><strong>urine24:</strong> {JSON.stringify(urine24)}</div>
+            <div><strong>contrastEgfr:</strong> {JSON.stringify(contrastEgfr)}</div>
+            <div><strong>hemodynamicInsult:</strong> {JSON.stringify(hemodynamicInsult)}</div>
+            <div><strong>bleedingCheck:</strong> {JSON.stringify(bleedingCheck)}</div>
+            <div><strong>confoundersAuto:</strong> {JSON.stringify(confoundersAuto)}</div>
+            <div><strong>Final result (safe):</strong> {JSON.stringify(safeFinal)}</div>
+          </div>
+        </details>
+      </div>
     </div>
-  </div>
   );
 }
