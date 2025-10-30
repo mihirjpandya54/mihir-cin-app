@@ -88,7 +88,7 @@ const round = (v: number | null | undefined, d = 2) =>
 // CKD-EPI (2009) simplified (no race)
 function estimateEGFR_CKD_EPI(scr: number | null | undefined, age: number | null | undefined, sex?: string | null) {
   if (scr == null || age == null || !sex) return null;
-  const female = sex.toLowerCase && sex.toLowerCase().startsWith('f');
+  const female = typeof sex === 'string' && sex.toLowerCase().startsWith('f');
   const k = female ? 0.7 : 0.9;
   const a = female ? -0.329 : -0.411;
   const scr_k = scr / k;
@@ -200,7 +200,7 @@ async function detectInsulinUse(patientId: string) {
 // - Congestive heart failure = 5
 // - Age > 75 = 4
 // - Anemia (hematocrit/hemoglobin) = 3  (we use Hb < 13 male / <12 female)
- // - Diabetes = 3
+// - Diabetes = 3
 // - Contrast volume => 1 point per 100 mL (rounded down)
 // - Baseline SCr >= 1.5 mg/dL -> 4
 function computeMehranOriginal(params: {
@@ -636,14 +636,14 @@ export default function ScoresPage({ params }: ScoresPageProps) {
           <div className="p-3 border rounded">
             <div className="text-sm text-gray-600">ACEF</div>
             <div className="text-2xl font-bold" style={{ color: '#0b1226' }}>{results?.acef ?? '—'}</div>
-            <div className="text-xs text-gray-500 mt-2">Formula: Age / LVEF + 1 (if SCr > 2 mg/dL)</div>
+            <div className="text-xs text-gray-500 mt-2">Formula: Age / LVEF + 1 (if SCr &gt; 2 mg/dL)</div>
           </div>
           <div className="p-3 border rounded">
             <div className="text-sm text-gray-600">ACEF-II</div>
             <div className="text-2xl font-bold" style={{ color: '#0b1226' }}>{results?.acef2 ?? '—'}</div>
             <div className="text-xs text-gray-500 mt-2">
-  Adaptation used in app: Age/LVEF + (SCr&gt;2 ? +2) + (emergency ? +3)
-</div>
+              Adaptation used in app: Age/LVEF + (SCr&gt;2 ? +2) + (emergency ? +3)
+            </div>
           </div>
         </div>
       </section>
