@@ -641,7 +641,9 @@ export default function ScoresPage({ params }: ScoresPageProps) {
           <div className="p-3 border rounded">
             <div className="text-sm text-gray-600">ACEF-II</div>
             <div className="text-2xl font-bold" style={{ color: '#0b1226' }}>{results?.acef2 ?? '—'}</div>
-            <div className="text-xs text-gray-500 mt-2">Adaptation used in app: Age/LVEF + (SCr>2 ? +2) + (emergency ? +3)</div>
+            <div className="text-xs text-gray-500 mt-2">
+  Adaptation used in app: Age/LVEF + (SCr&gt;2 ? +2) + (emergency ? +3)
+</div>
           </div>
         </div>
       </section>
