@@ -26,7 +26,7 @@ type RiskScoresRow = {
   acef2_risk_category?: string | null;
 };
 
-export default function ScoresPage(): JSX.Element {
+export default function ScoresPage() {
   const [patientId, setPatientId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
