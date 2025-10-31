@@ -4,12 +4,11 @@ import React, { useEffect, useState } from 'react';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 /**
- * Scores Page (TypeScript, ready-to-paste)
- * - Auto-fetches patient data from Supabase (uses schema you provided)
- * - Auto-calculates: Mehran (original), Mehran-2 (procedural/full), ACEF, ACEF-II
- * - Auto-upserts results into `risk_scores`
- *
- * Place into app/scores/[patientId]/page.tsx (or similar)
+ * Final Scores Page (TSX)
+ * - Auto-detects patientId: route param -> query param -> latest active_patient (no auth needed)
+ * - Auto-fetches data from Supabase (uses schema you provided)
+ * - Auto-calculates Mehran (original), Mehran-2 (procedural/full), ACEF, ACEF-II
+ * - Auto-upserts into `risk_scores`
  *
  * ENV required:
  * - NEXT_PUBLIC_SUPABASE_URL
@@ -22,7 +21,7 @@ const supabase: SupabaseClient = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ''
 );
 
-// ---------- Types (minimal useful types) ----------
+// ---------- Types ----------
 type UUID = string;
 
 type PatientDetails = {
@@ -41,7 +40,6 @@ type LabResult = {
   lab_date: string;
   scr?: number | null;
   hb?: number | null;
-  rbs?: number | null;
   timepoint?: string | null;
 };
 
@@ -55,6 +53,7 @@ type AngioRaw = {
   lcx_lesion_description?: string | null;
   rca_lesion_description?: string | null;
   impression?: string | null;
+  notes?: string | null;
 };
 
 type PtcaRaw = {
@@ -80,12 +79,11 @@ type Hemodynamics = {
   post_procedure_instability_ptca?: boolean | null;
 };
 
-// ---------- Utility helpers ----------
-
+// ---------- Utilities ----------
 const round = (v: number | null | undefined, d = 2) =>
   v == null ? null : Math.round((v + Number.EPSILON) * Math.pow(10, d)) / Math.pow(10, d);
 
-// CKD-EPI (2009) simplified (no race)
+// CKD-EPI (2009) approximate, no race
 function estimateEGFR_CKD_EPI(scr: number | null | undefined, age: number | null | undefined, sex?: string | null) {
   if (scr == null || age == null || !sex) return null;
   const female = typeof sex === 'string' && sex.toLowerCase().startsWith('f');
@@ -117,12 +115,7 @@ function detectDESCount(text?: string | null) {
   return 0;
 }
 
-function textIncludesAny(text: string, keywords: string[]) {
-  const lc = text.toLowerCase();
-  return keywords.some(k => lc.includes(k.toLowerCase()));
-}
-
-// procedural bleed detection from complications/notes/hemodynamics
+// procedural bleed detection
 function detectProceduralBleed(ptca?: PtcaRaw | null, hemo?: Hemodynamics | null) {
   const comp = `${ptca?.complications ?? ''} ${ptca?.notes ?? ''}`.toLowerCase();
   const bleedKeywords = ['bleed', 'hematoma', 'hemorrhage', 'transfusion', 'prbc', 'major bleed', 'blood loss', 'retroperitoneal'];
@@ -139,13 +132,7 @@ function detectSlowNoFlow(ptca?: PtcaRaw | null) {
   return slowKeywords.some(k => timi.includes(k) || comp.includes(k));
 }
 
-// complex anatomy detection (from CAG and PTCA note/stent text)
-// Rules used (combined pragmatic rule set based on our discussion):
-// - Left main mention OR LM stenosis >=50% => complex
-// - >=2 major epicardial vessels with stenosis >=70% => complex
-// - any vessel >=90% => complex
-// - descriptors: calcified/diffuse/proximal/ostial => complex
-// - DES count >=2 => complex
+// complex anatomy detection
 function detectComplexAnatomy(angio?: AngioRaw | null, ptca?: PtcaRaw | null) {
   const lmPct = extractStenosisPercent(angio?.lm_lesion_description ?? '');
   const ladPct = extractStenosisPercent(angio?.lad_lesion_description ?? '');
@@ -157,6 +144,7 @@ function detectComplexAnatomy(angio?: AngioRaw | null, ptca?: PtcaRaw | null) {
     angio?.lcx_lesion_description,
     angio?.rca_lesion_description,
     angio?.impression,
+    angio?.notes,
     ptca?.notes,
     ptca?.stent_details,
     ptca?.complications
@@ -175,7 +163,7 @@ function detectComplexAnatomy(angio?: AngioRaw | null, ptca?: PtcaRaw | null) {
   return hasLeftMainKeyword || multiVessel || anySevere90 || descriptorFound || multiDES;
 }
 
-// detect insulin use from past_medication_history
+// detect insulin use (optional helper)
 async function detectInsulinUse(patientId: string) {
   try {
     const { data, error } = await supabase
@@ -193,16 +181,7 @@ async function detectInsulinUse(patientId: string) {
 
 // ---------- Score calculators ----------
 
-// Mehran (original) — implemented using standard mapping (widely used clinical mapping)
-// Points mapping (classic):
-// - Hypotension (use of vasopressors/inotrope, systolic < 80) = 5
-// - IABP = 5
-// - Congestive heart failure = 5
-// - Age > 75 = 4
-// - Anemia (hematocrit/hemoglobin) = 3  (we use Hb < 13 male / <12 female)
-// - Diabetes = 3
-// - Contrast volume => 1 point per 100 mL (rounded down)
-// - Baseline SCr >= 1.5 mg/dL -> 4
+// Mehran original (classic-ish mapping)
 function computeMehranOriginal(params: {
   hypotension?: boolean;
   iabp?: boolean;
@@ -220,18 +199,14 @@ function computeMehranOriginal(params: {
   if (params.iabp) { score += 5; breakdown.push({ name: 'IABP', pts: 5 }); }
   if (params.chf) { score += 5; breakdown.push({ name: 'Congestive heart failure', pts: 5 }); }
   if (params.age != null && params.age > 75) { score += 4; breakdown.push({ name: 'Age > 75', pts: 4 }); }
-  if (params.hb != null) {
-    // anemia threshold (male <13, female <12)
-    if (params.hb < 12.5) { score += 3; breakdown.push({ name: 'Anemia (low Hb)', pts: 3 }); }
-  }
+  if (params.hb != null && params.hb < 12.5) { score += 3; breakdown.push({ name: 'Anemia (low Hb)', pts: 3 }); }
   if (params.diabetes) { score += 3; breakdown.push({ name: 'Diabetes', pts: 3 }); }
   if (params.contrast_volume_ml != null) {
-    const pts = Math.floor((params.contrast_volume_ml || 0) / 100); // 1 per 100 mL
+    const pts = Math.floor((params.contrast_volume_ml || 0) / 100);
     if (pts > 0) { score += pts; breakdown.push({ name: `Contrast volume (${params.contrast_volume_ml} mL)`, pts }); }
   }
   if (params.baseline_scr != null && params.baseline_scr >= 1.5) { score += 4; breakdown.push({ name: 'Baseline SCr ≥ 1.5 mg/dL', pts: 4 }); }
 
-  // risk category mapping (classic Mehran)
   let category = 'Unknown';
   if (score <= 5) category = 'Low';
   else if (score <= 10) category = 'Moderate';
@@ -241,18 +216,7 @@ function computeMehranOriginal(params: {
   return { score, category, breakdown };
 }
 
-// Mehran-2 (procedural full model) — pragmatic weights implemented per our design discussion:
-// The JACC/Lancet paper had integer weights; here we implement the clinically meaningful mapping:
-// - Age > 75: +2
-// - Hypotension/shock: +2
-// - Anemia: +1
-// - Diabetes: +1
-// - CHF / LVEF <40%: +1
-// - CKD (eGFR <60): +1
-// - Contrast burden >200 mL: +1
-// - Complex anatomy: +1
-// - Procedural bleed: +1
-// - Slow/no-flow: +1
+// Mehran-2 (procedural)
 function computeMehran2(params: {
   age?: number | null;
   hypotension?: boolean;
@@ -279,7 +243,6 @@ function computeMehran2(params: {
   if (params.procedural_bleed) { score += 1; breakdown.push({ name: 'Procedural bleeding', pts: 1 }); }
   if (params.slow_no_flow) { score += 1; breakdown.push({ name: 'Slow / No flow', pts: 1 }); }
 
-  // category mapping we discussed earlier:
   let category = 'Unknown';
   let predicted = 0;
   if (score <= 2) { category = 'Low'; predicted = 5; }
@@ -290,7 +253,7 @@ function computeMehran2(params: {
   return { score, category, predicted, breakdown };
 }
 
-// ACEF: Age / LVEF + 1 if SCr > 2.0 mg/dL
+// ACEF & ACEF-II
 function computeACEF(age?: number | null, lvef?: number | null, baseline_scr?: number | null) {
   if (!age || !lvef || lvef === 0) return null;
   let val = age / lvef;
@@ -298,7 +261,6 @@ function computeACEF(age?: number | null, lvef?: number | null, baseline_scr?: n
   return round(val, 2);
 }
 
-// ACEF-II: adaptation (age / LVEF + 2 if SCr>2 + 3 if emergency)
 function computeACEF2(age?: number | null, lvef?: number | null, baseline_scr?: number | null, emergency?: boolean) {
   if (!age || !lvef || lvef === 0) return null;
   let val = age / lvef;
@@ -307,7 +269,7 @@ function computeACEF2(age?: number | null, lvef?: number | null, baseline_scr?: 
   return round(val, 2);
 }
 
-// ---------- React component ----------
+// ---------- Component ----------
 type ScoresPageProps = { params?: { patientId?: string } };
 
 export default function ScoresPage({ params }: ScoresPageProps) {
@@ -330,21 +292,37 @@ export default function ScoresPage({ params }: ScoresPageProps) {
 
   useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(null), 4000); return () => clearTimeout(t); }, [toast]);
 
+  // Auto-detect patientId from active_patient if not provided
+  useEffect(() => {
+    if (patientId) return;
+    (async () => {
+      try {
+        const { data: activeData } = await supabase
+          .from('active_patient')
+          .select('patient_id')
+          .order('user_id', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (activeData?.patient_id) setPatientId(activeData.patient_id);
+      } catch (err) {
+        // non-fatal
+      }
+    })();
+  }, [patientId]);
+
+  // Fetch data once patientId known
   useEffect(() => {
     if (!patientId) return;
     setLoading(true);
     (async () => {
       try {
-        // patient_details
         const { data: pData, error: pErr } = await supabase.from('patient_details').select('*').eq('id', patientId).maybeSingle();
         if (pErr) throw pErr;
         setPatient(pData ?? null);
 
-        // patient_history
         const { data: hData } = await supabase.from('patient_history').select('*').eq('patient_id', patientId).limit(1);
         setHistory(hData && hData.length ? hData[0] : null);
 
-        // pre-procedure lab (latest)
         const { data: labData } = await supabase
           .from('lab_results')
           .select('*')
@@ -354,7 +332,6 @@ export default function ScoresPage({ params }: ScoresPageProps) {
           .limit(1);
         setPreLab(labData && labData.length ? labData[0] : null);
 
-        // angiography_raw latest
         const { data: angData } = await supabase
           .from('angiography_raw')
           .select('*')
@@ -363,7 +340,6 @@ export default function ScoresPage({ params }: ScoresPageProps) {
           .limit(1);
         setAngio(angData && angData.length ? angData[0] : null);
 
-        // ptca_raw latest
         const { data: ptcaData } = await supabase
           .from('ptca_raw')
           .select('*')
@@ -372,7 +348,6 @@ export default function ScoresPage({ params }: ScoresPageProps) {
           .limit(1);
         setPtca(ptcaData && ptcaData.length ? ptcaData[0] : null);
 
-        // echo
         const { data: echoData } = await supabase
           .from('echo_report')
           .select('*')
@@ -381,7 +356,6 @@ export default function ScoresPage({ params }: ScoresPageProps) {
           .limit(1);
         setEcho(echoData && echoData.length ? echoData[0] : null);
 
-        // iabp
         const { data: iabpData } = await supabase
           .from('iabp_report')
           .select('*')
@@ -390,7 +364,6 @@ export default function ScoresPage({ params }: ScoresPageProps) {
           .limit(1);
         setIabp(iabpData && iabpData.length ? iabpData[0] : null);
 
-        // vitals
         const { data: vData } = await supabase
           .from('on_arrival_vitals')
           .select('*')
@@ -399,7 +372,6 @@ export default function ScoresPage({ params }: ScoresPageProps) {
           .limit(1);
         setVitals(vData && vData.length ? vData[0] : null);
 
-        // hemodynamics
         const { data: hData2 } = await supabase
           .from('hemodynamics')
           .select('*')
@@ -416,7 +388,7 @@ export default function ScoresPage({ params }: ScoresPageProps) {
     })();
   }, [patientId]);
 
-  // Compute scores when data arrives
+  // Compute scores
   useEffect(() => {
     if (!patient) return;
     (async () => {
@@ -436,29 +408,26 @@ export default function ScoresPage({ params }: ScoresPageProps) {
 
         const egfr = baseline_scr ? estimateEGFR_CKD_EPI(baseline_scr, age ?? null, sex ?? null) : null;
         const ckd = egfr != null && egfr < 60;
-        const anemia = hb != null ? ( (sex && sex.toLowerCase().startsWith('f')) ? (hb < 12) : (hb < 13) ) : false;
+        const anemia = hb != null ? ((sex && sex.toLowerCase().startsWith('f')) ? (hb < 12) : (hb < 13)) : false;
 
-        // complex anatomy, procedural bleed, slow/no-flow detection using text intelligence
         const complex_anatomy = detectComplexAnatomy(angio, ptca);
         const procedural_bleed = detectProceduralBleed(ptca, hemo);
         const slow_no_flow = detectSlowNoFlow(ptca);
 
-        // insulin detection (for Mehran-2 model nuance)
-        const insulinUsed = await detectInsulinUse(patient.id);
+        // optional insulin usage check (not used in score but available)
+        const insulinUsed = patientId ? await detectInsulinUse(patientId) : false;
 
-        // Mehran (original)
         const mehranOrig = computeMehranOriginal({
           hypotension: hypotensionFlag,
           iabp: iabpInserted,
-          chf: chf,
-          age: age ?? null,
+          chf,
+          age,
           hb,
           diabetes,
           contrast_volume_ml: totalContrast,
           baseline_scr,
         });
 
-        // Mehran-2 (full)
         const mehran2Res = computeMehran2({
           age,
           hypotension: hypotensionFlag,
@@ -472,7 +441,6 @@ export default function ScoresPage({ params }: ScoresPageProps) {
           slow_no_flow,
         });
 
-        // ACEF & ACEF-II
         const acef = computeACEF(age ?? null, lvef ?? null, baseline_scr ?? null);
         const emergency_flag = !!(patient?.cardiac_arrest || vitals?.shock);
         const acef2 = computeACEF2(age ?? null, lvef ?? null, baseline_scr ?? null, emergency_flag);
@@ -490,6 +458,7 @@ export default function ScoresPage({ params }: ScoresPageProps) {
           complex_anatomy,
           procedural_bleed,
           slow_no_flow,
+          insulinUsed,
         };
 
         setResults(computed);
@@ -497,9 +466,9 @@ export default function ScoresPage({ params }: ScoresPageProps) {
         setToast({ msg: 'Calculation error: ' + (err.message ?? String(err)), type: 'error' });
       }
     })();
-  }, [patient, preLab, angio, ptca, echo, iabp, vitals, hemo, history]);
+  }, [patient, preLab, angio, ptca, echo, iabp, vitals, hemo, history, patientId]);
 
-  // Save/upsert results to risk_scores table
+  // Save results
   const saveToDb = async () => {
     if (!patientId || !results) { setToast({ msg: 'No patient or results to save', type: 'error' }); return; }
     setLoading(true);
@@ -520,7 +489,6 @@ export default function ScoresPage({ params }: ScoresPageProps) {
         acef2_predicted_risk: null,
       };
 
-      // either update by patient_id or insert
       const { data: existing, error: selErr } = await supabase.from('risk_scores').select('id').eq('patient_id', patientId).maybeSingle();
       if (selErr) throw selErr;
 
@@ -539,7 +507,6 @@ export default function ScoresPage({ params }: ScoresPageProps) {
     }
   };
 
-  // UI helpers
   const renderBreakdown = (items: { name: string; pts: number }[] | undefined) => {
     if (!items || items.length === 0) return <div className="text-gray-500">No contributors (check inputs).</div>;
     return <ul className="list-disc list-inside space-y-1">{items.map((b, i) => <li key={i}><strong>{b.name}</strong>: {b.pts} pts</li>)}</ul>;
@@ -549,7 +516,7 @@ export default function ScoresPage({ params }: ScoresPageProps) {
     <div className="p-6 max-w-5xl mx-auto">
       <h1 className="text-2xl font-bold mb-4" style={{ color: '#0b1226' }}>Risk Scores — Auto-calculated</h1>
 
-      {!patientId && <div className="mb-4 p-3 bg-yellow-50 border rounded">Patient ID missing. Provide route param or <code>?patientId=&lt;uuid&gt;</code>.</div>}
+      {!patientId && <div className="mb-4 p-3 bg-yellow-50 border rounded">Patient ID missing. No active patient. Select a patient first.</div>}
 
       {toast && (
         <div className={`mb-4 p-3 rounded ${toast.type === 'success' ? 'bg-green-50 border-green-200 text-green-800' : toast.type === 'error' ? 'bg-red-50 border-red-200 text-red-800' : 'bg-blue-50 border-blue-200 text-blue-800'}`}>
@@ -569,7 +536,7 @@ export default function ScoresPage({ params }: ScoresPageProps) {
         </div>
       )}
 
-      {/* Summary stats */}
+      {/* Summary */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         <div className="p-4 border rounded bg-white">
           <div className="text-sm text-gray-600">Baseline SCr</div>
@@ -641,9 +608,7 @@ export default function ScoresPage({ params }: ScoresPageProps) {
           <div className="p-3 border rounded">
             <div className="text-sm text-gray-600">ACEF-II</div>
             <div className="text-2xl font-bold" style={{ color: '#0b1226' }}>{results?.acef2 ?? '—'}</div>
-            <div className="text-xs text-gray-500 mt-2">
-              Adaptation used in app: Age/LVEF + (SCr&gt;2 ? +2) + (emergency ? +3)
-            </div>
+            <div className="text-xs text-gray-500 mt-2">Adaptation used in app: Age/LVEF + (SCr&gt;2 ? +2) + (emergency ? +3)</div>
           </div>
         </div>
       </section>
