@@ -229,7 +229,7 @@ export default function ScoresPage(): React.ReactElement {
 
   // ----------------- Predicted risk mapping functions -----------------
   function mehranPredictedRiskPct(score: number): number {
-    // mapping derived for display/storage
+    // mapping derived for display/storage (approx)
     if (score <= 5) return 7.5;
     if (score <= 10) return 14;
     if (score <= 15) return 26;
@@ -268,10 +268,10 @@ export default function ScoresPage(): React.ReactElement {
   const acef2 = useMemo(() => calcACEF2(), [age, lvef, scr, isEmergency, hematocrit]);
 
   // predicted risk values
-  const mehranPredPct = useMemo(() => mehranPredictedRiskPct(mehran.score), [mehran]);
-  const mehran2PredPct = useMemo(() => mehran2PredictedRiskPct(mehran2_model2.score), [mehran2_model2]);
-  const acefPredPct = useMemo(() => acefPredictedRiskPct(acef.score ?? null), [acef]);
-  const acef2PredPct = useMemo(() => acef2PredictedRiskPct(acef2.score ?? null), [acef2]);
+  const mehranPredPct = useMemo(() => mehranPredictedRiskPct(mehran.score), [mehran.score]);
+  const mehran2PredPct = useMemo(() => mehran2PredictedRiskPct(mehran2_model2.score), [mehran2_model2.score]);
+  const acefPredPct = useMemo(() => acefPredictedRiskPct(acef.score ?? null), [acef.score]);
+  const acef2PredPct = useMemo(() => acef2PredictedRiskPct(acef2.score ?? null), [acef2.score]);
 
   // ----------------- Save (upsert risk_scores) -----------------
   async function saveAll(): Promise<void> {
@@ -305,7 +305,13 @@ export default function ScoresPage(): React.ReactElement {
         alert('Save failed — check console.');
       } else {
         alert('Scores saved ✅');
-        const { data: fresh } = await supabase.from('risk_scores').select('*').eq('patient_id', patientId).order('created_at', { ascending: false }).limit(1).maybeSingle();
+        const { data: fresh } = await supabase
+          .from('risk_scores')
+          .select('*')
+          .eq('patient_id', patientId)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
         if (fresh) setSavedRow(fresh as RiskScoresRow);
       }
     } catch (err) {
@@ -340,6 +346,18 @@ export default function ScoresPage(): React.ReactElement {
         }
       }
     });
+  }
+
+  // boolean select (No / Yes) returns select element and updates boolean state
+  function booleanSelect(value: boolean, onChange: (b: boolean) => void): React.ReactElement {
+    return el('select', {
+      className: 'w-full rounded border px-2 py-1 text-sm text-gray-900',
+      value: value ? 'yes' : 'no',
+      onChange: (e: React.ChangeEvent<HTMLSelectElement>) => onChange(e.target.value === 'yes')
+    },
+      el('option', { value: 'no' }, 'No'),
+      el('option', { value: 'yes' }, 'Yes')
+    );
   }
 
   // labeled block that shows label with a short hint in brackets (per your request)
@@ -413,10 +431,10 @@ export default function ScoresPage(): React.ReactElement {
     )
   );
 
-  // Mehran card
+  // Mehran card (blueish background)
   const mehranCard = el(
     'div',
-    { className: 'bg-white rounded shadow p-4' },
+    { className: 'bg-blue-50 rounded shadow p-4' },
     el('div', { className: 'flex justify-between items-center mb-3' },
       el('h2', { className: 'text-lg font-bold text-gray-900' }, 'Mehran (2004)'),
       el('div', { className: 'text-sm text-gray-600' },
@@ -453,40 +471,16 @@ export default function ScoresPage(): React.ReactElement {
         el('option', { value: 'insulin' }, 'Insulin treated')
       )),
       labeledBlock('Contrast volume (mL)', 'Total contrast used — 1 point per 100 mL', numberInput(contrastVolumeMl, setContrastVolumeMl, 'mL')),
-      labeledBlock('CHF', 'Congestive HF (NYHA III/IV or pulmonary oedema) — check if present', el('div', null,
-        el('input', {
-          type: 'checkbox',
-          checked: chf,
-          onChange: (e: React.ChangeEvent<HTMLInputElement>) => setChf(e.target.checked)
-        }),
-        ' ',
-        el('span', { className: 'ml-2 text-sm text-gray-900' }, 'Yes')
-      )),
-      labeledBlock('Hypotension (periprocedural)', 'SBP ≤80 mmHg ≥1 h or requires inotrope/IABP', el('div', null,
-        el('input', {
-          type: 'checkbox',
-          checked: hypotension,
-          onChange: (e: React.ChangeEvent<HTMLInputElement>) => setHypotension(e.target.checked)
-        }),
-        ' ',
-        el('span', { className: 'ml-2 text-sm text-gray-900' }, 'Yes')
-      )),
-      labeledBlock('IABP', 'Intra-aortic balloon pump use during procedure', el('div', null,
-        el('input', {
-          type: 'checkbox',
-          checked: iabp,
-          onChange: (e: React.ChangeEvent<HTMLInputElement>) => setIabp(e.target.checked)
-        }),
-        ' ',
-        el('span', { className: 'ml-2 text-sm text-gray-900' }, 'Yes')
-      ))
+      labeledBlock('CHF', 'Congestive HF (NYHA III/IV or pulmonary oedema) — check if present', booleanSelect(chf, setChf)),
+      labeledBlock('Hypotension (periprocedural)', 'SBP ≤80 mmHg ≥1 h or requires inotrope/IABP', booleanSelect(hypotension, setHypotension)),
+      labeledBlock('IABP', 'Intra-aortic balloon pump use during procedure', booleanSelect(iabp, setIabp))
     )
   );
 
-  // Mehran-2 card
+  // Mehran-2 card (blueish background)
   const mehran2Card = el(
     'div',
-    { className: 'bg-white rounded shadow p-4' },
+    { className: 'bg-blue-50 rounded shadow p-4' },
     el('div', { className: 'flex justify-between items-center mb-3' },
       el('h2', { className: 'text-lg font-bold text-gray-900' }, 'Mehran-2 (Lancet 2021)'),
       el('div', { className: 'text-sm text-gray-600' },
@@ -532,50 +526,26 @@ export default function ScoresPage(): React.ReactElement {
         labeledBlock('Procedural items (Model 2)', 'Contrast volume / bleeding / slow flow / complexity', el('div', { className: 'grid grid-cols-1 md:grid-cols-4 gap-3 mt-2' },
           numberInput(contrastVolumeMl, setContrastVolumeMl, 'Contrast mL (Model2 thresholds: <100=0,100-199=1,200-299=2,>=300=4)'),
           el('div', null,
-            el('label', { className: 'text-xs text-gray-900' }, 'Procedural bleeding'),
-            el('div', null,
-              el('input', {
-                type: 'checkbox',
-                checked: proceduralBleed,
-                onChange: (e: React.ChangeEvent<HTMLInputElement>) => setProceduralBleed(e.target.checked)
-              }),
-              ' ',
-              el('span', { className: 'ml-2 text-sm text-gray-900' }, 'Yes (Hb drop >3 g/dL)')
-            )
+            el('label', { className: 'text-xs text-gray-900' }, 'Procedural bleeding (Hb drop >3 g/dL)'),
+            booleanSelect(proceduralBleed, setProceduralBleed)
           ),
           el('div', null,
             el('label', { className: 'text-xs text-gray-900' }, 'Slow flow / no flow (TIMI 0–1)'),
-            el('div', null,
-              el('input', {
-                type: 'checkbox',
-                checked: slowFlow,
-                onChange: (e: React.ChangeEvent<HTMLInputElement>) => setSlowFlow(e.target.checked)
-              }),
-              ' ',
-              el('span', { className: 'ml-2 text-sm text-gray-900' }, 'Yes')
-            )
+            booleanSelect(slowFlow, setSlowFlow)
           ),
           el('div', null,
             el('label', { className: 'text-xs text-gray-900' }, 'Complex anatomy'),
-            el('div', null,
-              el('input', {
-                type: 'checkbox',
-                checked: complexAnatomy,
-                onChange: (e: React.ChangeEvent<HTMLInputElement>) => setComplexAnatomy(e.target.checked)
-              }),
-              ' ',
-              el('span', { className: 'ml-2 text-sm text-gray-900' }, 'Yes (multivessel, CTO, long lesion, bifurcation etc.)')
-            )
+            booleanSelect(complexAnatomy, setComplexAnatomy)
           )
         ))
       )
     )
   );
 
-  // ACEF card
+  // ACEF card (blueish background)
   const acefCard = el(
     'div',
-    { className: 'bg-white rounded shadow p-4' },
+    { className: 'bg-blue-50 rounded shadow p-4' },
     el('div', { className: 'flex justify-between items-center mb-3' },
       el('h2', { className: 'text-lg font-bold text-gray-900' }, 'ACEF'),
       el('div', { className: 'text-sm text-gray-600' },
@@ -594,10 +564,10 @@ export default function ScoresPage(): React.ReactElement {
     )
   );
 
-  // ACEF-II card
+  // ACEF-II card (blueish background)
   const acef2Card = el(
     'div',
-    { className: 'bg-white rounded shadow p-4' },
+    { className: 'bg-blue-50 rounded shadow p-4' },
     el('div', { className: 'flex justify-between items-center mb-3' },
       el('h2', { className: 'text-lg font-bold text-gray-900' }, 'ACEF-II'),
       el('div', { className: 'text-sm text-gray-600' },
@@ -614,15 +584,7 @@ export default function ScoresPage(): React.ReactElement {
       labeledBlock('LVEF', '% — Left ventricular ejection fraction in percent (e.g., 55)', numberInput(lvef, setLvef, '%')),
       labeledBlock('Baseline SCr', 'mg/dL — Serum creatinine (ACEF-II adds +2 if >2.0 mg/dL)', numberInput(scr, setScr, 'mg/dL')),
       el('div', null,
-        labeledBlock('Emergency', 'check if emergency procedure (ACEF-II adds +3)', el('div', null,
-          el('input', {
-            type: 'checkbox',
-            checked: isEmergency,
-            onChange: (e: React.ChangeEvent<HTMLInputElement>) => setIsEmergency(e.target.checked)
-          }),
-          ' ',
-          el('span', { className: 'ml-2 text-sm text-gray-900' }, 'Yes')
-        )),
+        labeledBlock('Emergency', 'check if emergency procedure (ACEF-II adds +3)', booleanSelect(isEmergency, setIsEmergency)),
         labeledBlock('Hematocrit', '% — If Hct < 36% then ACEF-II adds 0.2 × (36 − Hct)', numberInput(hematocrit, setHematocrit, '%'))
       )
     )
