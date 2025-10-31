@@ -43,14 +43,14 @@ export default function ScoresPage(): React.ReactElement {
   const [hb, setHb] = useState<number | ''>(''); // g/dL (for anemia)
   const [diabetesType, setDiabetesType] = useState<'none' | 'non-insulin' | 'insulin' | ''>('');
   const [chf, setChf] = useState<boolean>(false);
-  const [hypotension, setHypotension] = useState<boolean>(false);
+  const [hypotension, setHypotension] = useState<boolean>(false); // periprocedural low
   const [iabp, setIabp] = useState<boolean>(false);
   const [contrastVolumeMl, setContrastVolumeMl] = useState<number | ''>('');
   const [lvef, setLvef] = useState<number | ''>(''); // %
   const [presentation, setPresentation] = useState<'stable' | 'unstable-angina' | 'nstemi' | 'stemi' | ''>('');
   const [basalGlucose, setBasalGlucose] = useState<number | ''>(''); // mg/dL
-  const [proceduralBleed, setProceduralBleed] = useState<boolean>(false);
-  const [slowFlow, setSlowFlow] = useState<boolean>(false);
+  const [proceduralBleed, setProceduralBleed] = useState<boolean>(false); // Hb drop >3g/dL
+  const [slowFlow, setSlowFlow] = useState<boolean>(false); // TIMI 0–1
   const [complexAnatomy, setComplexAnatomy] = useState<boolean>(false);
   const [isEmergency, setIsEmergency] = useState<boolean>(false);
   const [hematocrit, setHematocrit] = useState<number | ''>(''); // %
@@ -91,13 +91,14 @@ export default function ScoresPage(): React.ReactElement {
 
   // ----------------- Calculation helpers -----------------
 
+  // Mehran original (Model A: uses baseline creatinine >=1.5 mg/dL)
   function calcMehran(): { score: number; category: string } {
     let score = 0;
 
     if (hypotension) score += 5;
     if (iabp) score += 5;
     if (chf) score += 5;
-    if (typeof scr === 'number' && scr >= 1.5) score += 4;
+    if (typeof scr === 'number' && scr >= 1.5) score += 4; // baseline SCr >=1.5 mg/dL -> 4 pts
     if (typeof age === 'number' && age >= 75) score += 4;
 
     if (typeof hb === 'number') {
@@ -111,6 +112,7 @@ export default function ScoresPage(): React.ReactElement {
     if (diabetesType && diabetesType !== 'none') score += 3;
 
     if (typeof contrastVolumeMl === 'number' && contrastVolumeMl > 0) {
+      // 1 point per 100 mL (rounded down)
       score += Math.floor(contrastVolumeMl / 100);
     }
 
@@ -123,6 +125,7 @@ export default function ScoresPage(): React.ReactElement {
     return { score, category: cat };
   }
 
+  // Mehran-2 Model 1 (pre-procedural)
   function calcMehran2Model1(): { score: number; category: string } {
     let score = 0;
 
@@ -158,6 +161,7 @@ export default function ScoresPage(): React.ReactElement {
     return { score, category: cat };
   }
 
+  // Mehran-2 Model 2 (adds procedural items)
   function calcMehran2Model2(model1Score: number): { score: number; category: string } {
     let score = model1Score;
 
@@ -181,21 +185,23 @@ export default function ScoresPage(): React.ReactElement {
     return { score, category: cat };
   }
 
+  // ACEF
   function calcACEF(): { score: number | null; category: string } {
     if (typeof age !== 'number' || typeof lvef !== 'number' || lvef === 0) return { score: null, category: '—' };
     let acef = age / lvef;
-    if (typeof scr === 'number' && scr > 2.0) acef += 1;
+    if (typeof scr === 'number' && scr > 2.0) acef += 1; // add 1 if serum creatinine > 2.0 mg/dL
     const cat = acef < 0.8 ? 'Low' : acef < 1.2 ? 'Moderate' : 'High';
     return { score: Number(acef.toFixed(3)), category: cat };
   }
 
+  // ACEF-II
   function calcACEF2(): { score: number | null; category: string } {
     if (typeof age !== 'number' || typeof lvef !== 'number' || lvef === 0) return { score: null, category: '—' };
     let acef2 = age / lvef;
-    if (typeof scr === 'number' && scr > 2.0) acef2 += 2;
+    if (typeof scr === 'number' && scr > 2.0) acef2 += 2; // ACEF-II uses +2 for creatinine >2.0
     if (isEmergency) acef2 += 3;
     if (typeof hematocrit === 'number' && hematocrit < 36) {
-      acef2 += 0.2 * (36 - hematocrit);
+      acef2 += 0.2 * (36 - hematocrit); // 0.2 × (36 − Hct) if Hct < 36%
     }
     const cat = acef2 < 1 ? 'Low' : acef2 < 2 ? 'Moderate' : 'High';
     return { score: Number(acef2.toFixed(3)), category: cat };
@@ -252,8 +258,16 @@ export default function ScoresPage(): React.ReactElement {
   }
 
   // ----------------- UI helpers (non-JSX) -----------------
-  function numberInput(value: number | '' | undefined, onChange: (v: number | '') => void, placeholder = ''): React.ReactElement {
+  function numberInput(
+    value: number | '' | undefined,
+    onChange: (v: number | '') => void,
+    placeholder = ''
+  ): React.ReactElement {
+    // use type=number and step to allow decimals (including values < 1)
     return el('input', {
+      type: 'number',
+      step: '0.01',
+      inputMode: 'decimal',
       className: 'w-full rounded border px-2 py-1 text-sm text-gray-900',
       value: value === '' || value === undefined || value === null ? '' : String(value),
       placeholder,
@@ -268,13 +282,25 @@ export default function ScoresPage(): React.ReactElement {
     });
   }
 
-  if (loading) {
-    return el('div', { className: 'p-6 text-gray-900' }, 'Loading…');
+  // labeled block that shows label with a short hint in brackets (per your request)
+  function labeledBlock(labelText: string, hint: string, child: React.ReactElement): React.ReactElement {
+    // example: "Baseline SCr (mg/dL) — enter baseline serum creatinine, e.g., 0.7"
+    return el(
+      'div',
+      { className: 'space-y-2' },
+      el('label', { className: 'text-xs font-medium text-gray-900' },
+        `${labelText} `,
+        el('span', { className: 'text-xs text-gray-600' }, `(${hint})`)
+      ),
+      child
+    );
   }
 
-  // ----------------- Build UI programmatically -----------------
+  if (loading) return el('div', { className: 'p-6 text-gray-900' }, 'Loading…');
 
-  // top summary block
+  // ----------------- Render components programmatically -----------------
+
+  // Top summary
   const summaryBlock = el(
     'div',
     { className: 'w-full max-w-6xl mx-auto mb-4' },
@@ -314,12 +340,7 @@ export default function ScoresPage(): React.ReactElement {
     )
   );
 
-  // helper to build labeled input blocks (used many times)
-  function labeledBlock(labelText: string, child: React.ReactElement): React.ReactElement {
-    return el('div', { className: 'space-y-2' }, el('label', { className: 'text-xs font-medium text-gray-900' }, labelText), child);
-  }
-
-  // Mehran card
+  // Mehran card (with hints)
   const mehranCard = el(
     'div',
     { className: 'bg-white rounded shadow p-4' },
@@ -333,82 +354,61 @@ export default function ScoresPage(): React.ReactElement {
       )
     ),
     el('div', { className: 'grid grid-cols-1 md:grid-cols-3 gap-4' },
-      labeledBlock('Age', numberInput(age, setAge, 'years')),
-      el('div', { className: 'space-y-2' },
-        el('label', { className: 'text-xs font-medium text-gray-900' }, 'Sex'),
-        el('select', {
-          className: 'w-full rounded border px-2 py-1 text-sm text-gray-900',
-          value: sex,
-          onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setSex(e.target.value as any)
-        },
-          el('option', { value: '' }, '—'),
-          el('option', { value: 'Male' }, 'Male'),
-          el('option', { value: 'Female' }, 'Female'),
-          el('option', { value: 'Other' }, 'Other')
-        )
-      ),
-      labeledBlock('Baseline SCr (mg/dL)', numberInput(scr, setScr, 'mg/dL')),
-
-      labeledBlock('Hb (g/dL)', numberInput(hb, setHb, 'g/dL')),
-
-      el('div', { className: 'space-y-2' },
-        el('label', { className: 'text-xs font-medium text-gray-900' }, 'Diabetes'),
-        el('select', {
-          className: 'w-full rounded border px-2 py-1 text-sm text-gray-900',
-          value: diabetesType,
-          onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setDiabetesType(e.target.value as any)
-        },
-          el('option', { value: '' }, '—'),
-          el('option', { value: 'none' }, 'No'),
-          el('option', { value: 'non-insulin' }, 'Non-insulin treated'),
-          el('option', { value: 'insulin' }, 'Insulin treated')
-        )
-      ),
-
-      labeledBlock('Contrast volume (mL)', numberInput(contrastVolumeMl, setContrastVolumeMl, 'mL')),
-
-      el('div', { className: 'space-y-2' },
-        el('label', { className: 'text-xs font-medium text-gray-900' }, 'CHF (NYHA III/IV or pulmonary edema)'),
-        el('div', null,
-          el('input', {
-            type: 'checkbox',
-            checked: chf,
-            onChange: (e: React.ChangeEvent<HTMLInputElement>) => setChf(e.target.checked)
-          }),
-          ' ',
-          el('span', { className: 'ml-2 text-sm text-gray-900' }, 'Yes')
-        )
-      ),
-
-      el('div', { className: 'space-y-2' },
-        el('label', { className: 'text-xs font-medium text-gray-900' }, 'Hypotension (periprocedural)'),
-        el('div', null,
-          el('input', {
-            type: 'checkbox',
-            checked: hypotension,
-            onChange: (e: React.ChangeEvent<HTMLInputElement>) => setHypotension(e.target.checked)
-          }),
-          ' ',
-          el('span', { className: 'ml-2 text-sm text-gray-900' }, 'Yes')
-        )
-      ),
-
-      el('div', { className: 'space-y-2' },
-        el('label', { className: 'text-xs font-medium text-gray-900' }, 'IABP'),
-        el('div', null,
-          el('input', {
-            type: 'checkbox',
-            checked: iabp,
-            onChange: (e: React.ChangeEvent<HTMLInputElement>) => setIabp(e.target.checked)
-          }),
-          ' ',
-          el('span', { className: 'ml-2 text-sm text-gray-900' }, 'Yes')
-        )
-      )
+      labeledBlock('Age', 'years — patient age in years', numberInput(age, setAge, 'years')),
+      labeledBlock('Sex', 'Male / Female / Other', el('select', {
+        className: 'w-full rounded border px-2 py-1 text-sm text-gray-900',
+        value: sex,
+        onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setSex(e.target.value as any)
+      },
+        el('option', { value: '' }, '—'),
+        el('option', { value: 'Male' }, 'Male'),
+        el('option', { value: 'Female' }, 'Female'),
+        el('option', { value: 'Other' }, 'Other')
+      )),
+      labeledBlock('Baseline SCr', 'mg/dL — baseline serum creatinine (e.g., 0.7). decimals allowed', numberInput(scr, setScr, 'mg/dL')),
+      labeledBlock('Hb', 'g/dL — baseline hemoglobin; used to detect anemia', numberInput(hb, setHb, 'g/dL')),
+      labeledBlock('Diabetes', 'No / Non-insulin / Insulin — diabetes treatment status', el('select', {
+        className: 'w-full rounded border px-2 py-1 text-sm text-gray-900',
+        value: diabetesType,
+        onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setDiabetesType(e.target.value as any)
+      },
+        el('option', { value: '' }, '—'),
+        el('option', { value: 'none' }, 'No'),
+        el('option', { value: 'non-insulin' }, 'Non-insulin treated'),
+        el('option', { value: 'insulin' }, 'Insulin treated')
+      )),
+      labeledBlock('Contrast volume (mL)', 'Total contrast used — 1 point per 100 mL', numberInput(contrastVolumeMl, setContrastVolumeMl, 'mL')),
+      labeledBlock('CHF', 'Congestive HF (NYHA III/IV or pulmonary oedema) — check if present', el('div', null,
+        el('input', {
+          type: 'checkbox',
+          checked: chf,
+          onChange: (e: React.ChangeEvent<HTMLInputElement>) => setChf(e.target.checked)
+        }),
+        ' ',
+        el('span', { className: 'ml-2 text-sm text-gray-900' }, 'Yes')
+      )),
+      labeledBlock('Hypotension (periprocedural)', 'SBP ≤80 mmHg ≥1 h or requires inotrope/IABP', el('div', null,
+        el('input', {
+          type: 'checkbox',
+          checked: hypotension,
+          onChange: (e: React.ChangeEvent<HTMLInputElement>) => setHypotension(e.target.checked)
+        }),
+        ' ',
+        el('span', { className: 'ml-2 text-sm text-gray-900' }, 'Yes')
+      )),
+      labeledBlock('IABP', 'Intra-aortic balloon pump use during procedure', el('div', null,
+        el('input', {
+          type: 'checkbox',
+          checked: iabp,
+          onChange: (e: React.ChangeEvent<HTMLInputElement>) => setIabp(e.target.checked)
+        }),
+        ' ',
+        el('span', { className: 'ml-2 text-sm text-gray-900' }, 'Yes')
+      ))
     )
   );
 
-  // Mehran-2 card
+  // Mehran-2 card (with hints)
   const mehran2Card = el(
     'div',
     { className: 'bg-white rounded shadow p-4' },
@@ -427,55 +427,36 @@ export default function ScoresPage(): React.ReactElement {
       )
     ),
     el('div', { className: 'grid grid-cols-1 md:grid-cols-3 gap-4' },
-      el('div', null,
-        el('label', { className: 'text-xs font-medium text-gray-900' }, 'Clinical presentation'),
-        el('select', {
-          className: 'w-full rounded border px-2 py-1 text-sm text-gray-900',
-          value: presentation,
-          onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setPresentation(e.target.value as any)
-        },
-          el('option', { value: '' }, 'Stable / Asymptomatic'),
-          el('option', { value: 'unstable-angina' }, 'Unstable angina'),
-          el('option', { value: 'nstemi' }, 'NSTEMI'),
-          el('option', { value: 'stemi' }, 'STEMI')
-        )
-      ),
-      el('div', null,
-        el('label', { className: 'text-xs font-medium text-gray-900' }, 'eGFR (mL/min/1.73m²)'),
-        numberInput(egfr, setEgfr, 'mL/min/1.73m²')
-      ),
-      el('div', null,
-        el('label', { className: 'text-xs font-medium text-gray-900' }, 'LVEF (%)'),
-        numberInput(lvef, setLvef, '%')
-      ),
-      el('div', null,
-        el('label', { className: 'text-xs font-medium text-gray-900' }, 'Diabetes (type)'),
-        el('select', {
-          className: 'w-full rounded border px-2 py-1 text-sm text-gray-900',
-          value: diabetesType,
-          onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setDiabetesType(e.target.value as any)
-        },
-          el('option', { value: '' }, '—'),
-          el('option', { value: 'none' }, 'No'),
-          el('option', { value: 'non-insulin' }, 'Non-insulin'),
-          el('option', { value: 'insulin' }, 'Insulin')
-        )
-      ),
-      el('div', null,
-        el('label', { className: 'text-xs font-medium text-gray-900' }, 'Hb (g/dL)'),
-        numberInput(hb, setHb, 'g/dL')
-      ),
-      el('div', null,
-        el('label', { className: 'text-xs font-medium text-gray-900' }, 'Basal glucose (mg/dL)'),
-        numberInput(basalGlucose, setBasalGlucose, 'mg/dL')
-      ),
+      labeledBlock('Clinical presentation', 'Stable / Unstable angina / NSTEMI / STEMI — choose presentation', el('select', {
+        className: 'w-full rounded border px-2 py-1 text-sm text-gray-900',
+        value: presentation,
+        onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setPresentation(e.target.value as any)
+      },
+        el('option', { value: '' }, 'Stable / Asymptomatic'),
+        el('option', { value: 'unstable-angina' }, 'Unstable angina'),
+        el('option', { value: 'nstemi' }, 'NSTEMI'),
+        el('option', { value: 'stemi' }, 'STEMI')
+      )),
+      labeledBlock('eGFR', 'mL/min/1.73m² — kidney function; optional Mehran variant uses eGFR categories', numberInput(egfr, setEgfr, 'mL/min/1.73m²')),
+      labeledBlock('LVEF', '% — left ventricular ejection fraction (e.g., 55)', numberInput(lvef, setLvef, '%')),
+      labeledBlock('Diabetes (type)', 'No / Non-insulin / Insulin (affects Mehran-2 points)', el('select', {
+        className: 'w-full rounded border px-2 py-1 text-sm text-gray-900',
+        value: diabetesType,
+        onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setDiabetesType(e.target.value as any)
+      },
+        el('option', { value: '' }, '—'),
+        el('option', { value: 'none' }, 'No'),
+        el('option', { value: 'non-insulin' }, 'Non-insulin'),
+        el('option', { value: 'insulin' }, 'Insulin')
+      )),
+      labeledBlock('Hb', 'g/dL — haemoglobin (Mehran-2 gives 1 point if <11 g/dL)', numberInput(hb, setHb, 'g/dL')),
+      labeledBlock('Basal glucose', 'mg/dL — fasting / baseline glucose (>=150 adds 1 point)', numberInput(basalGlucose, setBasalGlucose, 'mg/dL')),
 
       el('div', { className: 'col-span-1 md:col-span-3' },
-        el('label', { className: 'text-xs font-medium text-gray-900' }, 'Procedural items (Model 2)'),
-        el('div', { className: 'grid grid-cols-1 md:grid-cols-4 gap-3 mt-2' },
-          el('div', null, numberInput(contrastVolumeMl, setContrastVolumeMl, 'Contrast mL')),
+        labeledBlock('Procedural items (Model 2)', 'Contrast volume / bleeding / slow flow / complexity', el('div', { className: 'grid grid-cols-1 md:grid-cols-4 gap-3 mt-2' },
+          numberInput(contrastVolumeMl, setContrastVolumeMl, 'Contrast mL (Model2 thresholds: <100=0,100-199=1,200-299=2,>=300=4)'),
           el('div', null,
-            el('label', { className: 'text-xs text-gray-900' }, 'Procedural bleeding (Hb drop >3 g/dL)'),
+            el('label', { className: 'text-xs text-gray-900' }, 'Procedural bleeding'),
             el('div', null,
               el('input', {
                 type: 'checkbox',
@@ -483,7 +464,7 @@ export default function ScoresPage(): React.ReactElement {
                 onChange: (e: React.ChangeEvent<HTMLInputElement>) => setProceduralBleed(e.target.checked)
               }),
               ' ',
-              el('span', { className: 'ml-2 text-sm text-gray-900' }, 'Yes')
+              el('span', { className: 'ml-2 text-sm text-gray-900' }, 'Yes (Hb drop >3 g/dL)')
             )
           ),
           el('div', null,
@@ -507,15 +488,15 @@ export default function ScoresPage(): React.ReactElement {
                 onChange: (e: React.ChangeEvent<HTMLInputElement>) => setComplexAnatomy(e.target.checked)
               }),
               ' ',
-              el('span', { className: 'ml-2 text-sm text-gray-900' }, 'Yes')
+              el('span', { className: 'ml-2 text-sm text-gray-900' }, 'Yes (multivessel, CTO, long lesion, bifurcation etc.)')
             )
           )
-        )
+        ))
       )
     )
   );
 
-  // ACEF card
+  // ACEF card (show clear hints beside parameters)
   const acefCard = el(
     'div',
     { className: 'bg-white rounded shadow p-4' },
@@ -529,13 +510,13 @@ export default function ScoresPage(): React.ReactElement {
       )
     ),
     el('div', { className: 'grid grid-cols-1 md:grid-cols-3 gap-4' },
-      numberInput(age, setAge, 'years'),
-      numberInput(lvef, setLvef, '%'),
-      numberInput(scr, setScr, 'mg/dL')
+      labeledBlock('Age', 'years — Age in years (for ACEF: Age / LVEF)', numberInput(age, setAge, 'years')),
+      labeledBlock('LVEF', '% — Left ventricular ejection fraction in percent (e.g., 55)', numberInput(lvef, setLvef, '%')),
+      labeledBlock('Baseline SCr', 'mg/dL — Serum creatinine in mg/dL (ACEF adds +1 if >2.0 mg/dL)', numberInput(scr, setScr, 'mg/dL'))
     )
   );
 
-  // ACEF-II card
+  // ACEF-II card (with explanation next to each param)
   const acef2Card = el(
     'div',
     { className: 'bg-white rounded shadow p-4' },
@@ -549,12 +530,11 @@ export default function ScoresPage(): React.ReactElement {
       )
     ),
     el('div', { className: 'grid grid-cols-1 md:grid-cols-4 gap-4' },
-      numberInput(age, setAge, 'years'),
-      numberInput(lvef, setLvef, '%'),
-      numberInput(scr, setScr, 'mg/dL'),
+      labeledBlock('Age', 'years — Age in years', numberInput(age, setAge, 'years')),
+      labeledBlock('LVEF', '% — Left ventricular ejection fraction in percent (e.g., 55)', numberInput(lvef, setLvef, '%')),
+      labeledBlock('Baseline SCr', 'mg/dL — Serum creatinine (ACEF-II adds +2 if >2.0 mg/dL)', numberInput(scr, setScr, 'mg/dL')),
       el('div', null,
-        el('label', { className: 'text-xs font-medium text-gray-900' }, 'Emergency'),
-        el('div', null,
+        labeledBlock('Emergency', 'check if emergency procedure (ACEF-II adds +3)', el('div', null,
           el('input', {
             type: 'checkbox',
             checked: isEmergency,
@@ -562,14 +542,13 @@ export default function ScoresPage(): React.ReactElement {
           }),
           ' ',
           el('span', { className: 'ml-2 text-sm text-gray-900' }, 'Yes')
-        ),
-        el('div', { className: 'mt-2 text-xs text-gray-900' }, 'Hematocrit (%)'),
-        numberInput(hematocrit, setHematocrit, '%')
+        )),
+        labeledBlock('Hematocrit', '% — If Hct < 36% then ACEF-II adds 0.2 × (36 − Hct)', numberInput(hematocrit, setHematocrit, '%'))
       )
     )
   );
 
-  // Save button element
+  // Save button
   const saveButton = el('div', { className: 'flex justify-end' },
     el('button', {
       onClick: () => { void saveAll(); },
@@ -579,13 +558,15 @@ export default function ScoresPage(): React.ReactElement {
   );
 
   // savedRow display
-  const savedRowBlock = savedRow ? el('div', { className: 'bg-white rounded shadow p-3 text-sm text-gray-700' },
-    el('div', null, el('strong', { className: 'text-gray-900' }, 'Saved (last):')),
-    el('div', { className: 'mt-1 text-gray-900' }, `Mehran: ${savedRow.mehran1_score ?? '—'} (${savedRow.mehran1_risk_category ?? '—'})`),
-    el('div', { className: 'text-gray-900' }, `Mehran-2: ${savedRow.mehran2_score ?? '—'} (${savedRow.mehran2_risk_category ?? '—'})`),
-    el('div', { className: 'text-gray-900' }, `ACEF: ${savedRow.acef_score ?? '—'} (${savedRow.acef_risk_category ?? '—'})`),
-    el('div', { className: 'text-gray-900' }, `ACEF-II: ${savedRow.acef2_score ?? '—'} (${savedRow.acef2_risk_category ?? '—'})`)
-  ) : null;
+  const savedRowBlock = savedRow
+    ? el('div', { className: 'bg-white rounded shadow p-3 text-sm text-gray-700' },
+      el('div', null, el('strong', { className: 'text-gray-900' }, 'Saved (last):')),
+      el('div', { className: 'mt-1 text-gray-900' }, `Mehran: ${savedRow.mehran1_score ?? '—'} (${savedRow.mehran1_risk_category ?? '—'})`),
+      el('div', { className: 'text-gray-900' }, `Mehran-2: ${savedRow.mehran2_score ?? '—'} (${savedRow.mehran2_risk_category ?? '—'})`),
+      el('div', { className: 'text-gray-900' }, `ACEF: ${savedRow.acef_score ?? '—'} (${savedRow.acef_risk_category ?? '—'})`),
+      el('div', { className: 'text-gray-900' }, `ACEF-II: ${savedRow.acef2_score ?? '—'} (${savedRow.acef2_risk_category ?? '—'})`)
+    )
+    : null;
 
   // final page container
   return el('div', { className: 'min-h-screen bg-gray-50 p-6' },
