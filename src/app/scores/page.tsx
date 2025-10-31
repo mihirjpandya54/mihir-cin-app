@@ -18,12 +18,17 @@ type RiskScoresRow = {
   patient_id?: string | null;
   mehran1_score?: number | null;
   mehran1_risk_category?: string | null;
+  mehran1_predicted_risk?: number | null;
   mehran2_score?: number | null;
   mehran2_risk_category?: string | null;
+  mehran2_predicted_risk?: number | null;
   acef_score?: number | null;
   acef_risk_category?: string | null;
+  acef_predicted_risk?: number | null;
   acef2_score?: number | null;
   acef2_risk_category?: string | null;
+  acef2_predicted_risk?: number | null;
+  created_at?: string | null;
 };
 
 // small alias to avoid repeating React.createElement
@@ -31,6 +36,8 @@ const el = React.createElement;
 
 export default function ScoresPage(): React.ReactElement {
   const [patientId, setPatientId] = useState<string | null>(null);
+  const [patientName, setPatientName] = useState<string | null>(null);
+  const [ipdNumber, setIpdNumber] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savedRow, setSavedRow] = useState<RiskScoresRow | null>(null);
@@ -38,7 +45,7 @@ export default function ScoresPage(): React.ReactElement {
   // ----------------- Form inputs (manual only) -----------------
   const [age, setAge] = useState<number | ''>('');
   const [sex, setSex] = useState<'Male' | 'Female' | 'Other' | ''>('');
-  const [scr, setScr] = useState<number | ''>(''); // mg/dL
+  const [scr, setScr] = useState<number | ''>(''); // mg/dL (decimals allowed)
   const [egfr, setEgfr] = useState<number | ''>(''); // mL/min/1.73m2
   const [hb, setHb] = useState<number | ''>(''); // g/dL (for anemia)
   const [diabetesType, setDiabetesType] = useState<'none' | 'non-insulin' | 'insulin' | ''>('');
@@ -55,7 +62,7 @@ export default function ScoresPage(): React.ReactElement {
   const [isEmergency, setIsEmergency] = useState<boolean>(false);
   const [hematocrit, setHematocrit] = useState<number | ''>(''); // %
 
-  // ----------------- load active patient -----------------
+  // ----------------- load active patient & last saved scores -----------------
   useEffect(() => {
     (async () => {
       setLoading(true);
@@ -66,13 +73,26 @@ export default function ScoresPage(): React.ReactElement {
           .eq('user_id', USER_ID)
           .maybeSingle();
 
-        setPatientId(active?.patient_id ?? null);
+        const pid = (active as any)?.patient_id ?? null;
+        setPatientId(pid);
 
-        if (active?.patient_id) {
+        if (pid) {
+          // fetch patient details
+          const { data: pd } = await supabase
+            .from('patient_details')
+            .select('patient_name, ipd_number')
+            .eq('id', pid)
+            .maybeSingle();
+
+          setPatientName((pd as any)?.patient_name ?? null);
+          setIpdNumber((pd as any)?.ipd_number ?? null);
+
+          // load last saved risk_scores if any
           const { data: rs } = await supabase
             .from('risk_scores')
             .select('*')
-            .eq('patient_id', active.patient_id)
+            .eq('patient_id', pid)
+            .order('created_at', { ascending: false })
             .limit(1)
             .maybeSingle();
 
@@ -207,6 +227,36 @@ export default function ScoresPage(): React.ReactElement {
     return { score: Number(acef2.toFixed(3)), category: cat };
   }
 
+  // ----------------- Predicted risk mapping functions -----------------
+  function mehranPredictedRiskPct(score: number): number {
+    // mapping derived for display/storage
+    if (score <= 5) return 7.5;
+    if (score <= 10) return 14;
+    if (score <= 15) return 26;
+    return 57;
+  }
+
+  function mehran2PredictedRiskPct(score: number): number {
+    if (score <= 4) return 2;
+    if (score <= 9) return 7;
+    if (score <= 13) return 15;
+    return 25;
+  }
+
+  function acefPredictedRiskPct(value: number | null): number | null {
+    if (value === null) return null;
+    if (value < 0.8) return 2;
+    if (value < 1.2) return 5;
+    return 8;
+  }
+
+  function acef2PredictedRiskPct(value: number | null): number | null {
+    if (value === null) return null;
+    if (value < 1) return 2;
+    if (value < 2) return 5;
+    return 8;
+  }
+
   // ----------------- memoized results -----------------
   const mehran = useMemo(() => calcMehran(), [hypotension, iabp, chf, scr, age, hb, diabetesType, contrastVolumeMl, sex]);
   const mehran2_model1 = useMemo(() => calcMehran2Model1(), [presentation, egfr, lvef, diabetesType, hb, basalGlucose, chf, age]);
@@ -216,6 +266,12 @@ export default function ScoresPage(): React.ReactElement {
   );
   const acef = useMemo(() => calcACEF(), [age, lvef, scr]);
   const acef2 = useMemo(() => calcACEF2(), [age, lvef, scr, isEmergency, hematocrit]);
+
+  // predicted risk values
+  const mehranPredPct = useMemo(() => mehranPredictedRiskPct(mehran.score), [mehran]);
+  const mehran2PredPct = useMemo(() => mehran2PredictedRiskPct(mehran2_model2.score), [mehran2_model2]);
+  const acefPredPct = useMemo(() => acefPredictedRiskPct(acef.score ?? null), [acef]);
+  const acef2PredPct = useMemo(() => acef2PredictedRiskPct(acef2.score ?? null), [acef2]);
 
   // ----------------- Save (upsert risk_scores) -----------------
   async function saveAll(): Promise<void> {
@@ -229,12 +285,16 @@ export default function ScoresPage(): React.ReactElement {
         patient_id: patientId,
         mehran1_score: Number(mehran.score),
         mehran1_risk_category: mehran.category,
+        mehran1_predicted_risk: Number(mehranPredPct),
         mehran2_score: Number(mehran2_model2.score),
         mehran2_risk_category: mehran2_model2.category,
+        mehran2_predicted_risk: Number(mehran2PredPct),
         acef_score: acef.score ?? null,
         acef_risk_category: acef.category,
+        acef_predicted_risk: acefPredPct ?? null,
         acef2_score: acef2.score ?? null,
-        acef2_risk_category: acef2.category
+        acef2_risk_category: acef2.category,
+        acef2_predicted_risk: acef2PredPct ?? null
       };
 
       const { error } = await supabase.from('risk_scores').upsert(payload, { onConflict: 'patient_id' });
@@ -245,8 +305,8 @@ export default function ScoresPage(): React.ReactElement {
         alert('Save failed — check console.');
       } else {
         alert('Scores saved ✅');
-        const { data: fresh } = await supabase.from('risk_scores').select('*').eq('patient_id', patientId).maybeSingle();
-        setSavedRow(fresh as RiskScoresRow);
+        const { data: fresh } = await supabase.from('risk_scores').select('*').eq('patient_id', patientId).order('created_at', { ascending: false }).limit(1).maybeSingle();
+        if (fresh) setSavedRow(fresh as RiskScoresRow);
       }
     } catch (err) {
       // eslint-disable-next-line no-console
@@ -284,13 +344,12 @@ export default function ScoresPage(): React.ReactElement {
 
   // labeled block that shows label with a short hint in brackets (per your request)
   function labeledBlock(labelText: string, hint: string, child: React.ReactElement): React.ReactElement {
-    // example: "Baseline SCr (mg/dL) — enter baseline serum creatinine, e.g., 0.7"
     return el(
       'div',
       { className: 'space-y-2' },
       el('label', { className: 'text-xs font-medium text-gray-900' },
         `${labelText} `,
-        el('span', { className: 'text-xs text-gray-600' }, `(${hint})`)
+        el('span', { className: 'text-xs text-gray-600' }, `— ${hint}`)
       ),
       child
     );
@@ -298,9 +357,14 @@ export default function ScoresPage(): React.ReactElement {
 
   if (loading) return el('div', { className: 'p-6 text-gray-900' }, 'Loading…');
 
-  // ----------------- Render components programmatically -----------------
+  // ----------------- Build UI programmatically -----------------
 
-  // Top summary
+  // Active patient header
+  const patientHeader = el('div', { className: 'text-sm text-gray-700' },
+    el('div', null, el('strong', null, 'Active patient: '), patientName ? `${patientName} (IPD: ${ipdNumber ?? '—'})` : '—')
+  );
+
+  // summary block (top)
   const summaryBlock = el(
     'div',
     { className: 'w-full max-w-6xl mx-auto mb-4' },
@@ -309,38 +373,47 @@ export default function ScoresPage(): React.ReactElement {
       { className: 'bg-white rounded shadow p-4 flex items-center justify-between gap-4' },
       el('div', null,
         el('h1', { className: 'text-xl font-bold text-gray-900' }, '🧮 Risk Scores — Summary'),
-        el('div', { className: 'text-sm text-gray-700 mt-1' }, 'Enter parameters manually in cards below. Summary updates live.')
+        el('div', { className: 'text-sm text-gray-700 mt-1' }, 'Enter parameters manually in cards below. Summary updates live.'),
+        el('div', { className: 'mt-2' }, patientHeader)
       ),
       el('div', { className: 'flex gap-6 items-center text-gray-900' },
         el('div', { className: 'text-sm' },
           el('div', null,
             el('strong', { className: 'text-gray-900' }, 'Mehran:'),
             ' ',
-            el('span', { className: 'font-semibold' }, `${mehran.score} (${mehran.category})`)
+            el('span', { className: 'font-semibold' }, `${mehran.score} (${mehran.category})`),
+            ' ',
+            el('span', { className: 'text-xs text-gray-600 ml-2' }, `${mehranPredPct}% est`)
           ),
           el('div', { className: 'mt-1' },
             el('strong', { className: 'text-gray-900' }, 'Mehran-2 (M2):'),
             ' ',
-            el('span', { className: 'font-semibold' }, `${mehran2_model2.score} (${mehran2_model2.category})`)
+            el('span', { className: 'font-semibold' }, `${mehran2_model2.score} (${mehran2_model2.category})`),
+            ' ',
+            el('span', { className: 'text-xs text-gray-600 ml-2' }, `${mehran2PredPct}% est`)
           )
         ),
         el('div', { className: 'text-sm' },
           el('div', null,
             el('strong', { className: 'text-gray-900' }, 'ACEF:'),
             ' ',
-            el('span', { className: 'font-semibold' }, `${acef.score ?? '—'} (${acef.category})`)
+            el('span', { className: 'font-semibold' }, `${acef.score ?? '—'} (${acef.category})`),
+            ' ',
+            el('span', { className: 'text-xs text-gray-600 ml-2' }, acefPredPct !== null ? `${acefPredPct}% est` : '')
           ),
           el('div', { className: 'mt-1' },
             el('strong', { className: 'text-gray-900' }, 'ACEF-II:'),
             ' ',
-            el('span', { className: 'font-semibold' }, `${acef2.score ?? '—'} (${acef2.category})`)
+            el('span', { className: 'font-semibold' }, `${acef2.score ?? '—'} (${acef2.category})`),
+            ' ',
+            el('span', { className: 'text-xs text-gray-600 ml-2' }, acef2PredPct !== null ? `${acef2PredPct}% est` : '')
           )
         )
       )
     )
   );
 
-  // Mehran card (with hints)
+  // Mehran card
   const mehranCard = el(
     'div',
     { className: 'bg-white rounded shadow p-4' },
@@ -350,7 +423,9 @@ export default function ScoresPage(): React.ReactElement {
         'Score: ',
         el('span', { className: 'font-semibold text-gray-900' }, String(mehran.score)),
         ' — ',
-        el('span', { className: 'text-gray-900' }, mehran.category)
+        el('span', { className: 'text-gray-900' }, mehran.category),
+        ' ',
+        el('span', { className: 'text-xs text-gray-600 ml-2' }, `${mehranPredPct}% estimated CIN`)
       )
     ),
     el('div', { className: 'grid grid-cols-1 md:grid-cols-3 gap-4' },
@@ -408,7 +483,7 @@ export default function ScoresPage(): React.ReactElement {
     )
   );
 
-  // Mehran-2 card (with hints)
+  // Mehran-2 card
   const mehran2Card = el(
     'div',
     { className: 'bg-white rounded shadow p-4' },
@@ -423,7 +498,9 @@ export default function ScoresPage(): React.ReactElement {
         'Model2: ',
         el('span', { className: 'font-semibold text-gray-900' }, String(mehran2_model2.score)),
         ' — ',
-        el('span', { className: 'text-gray-900' }, mehran2_model2.category)
+        el('span', { className: 'text-gray-900' }, mehran2_model2.category),
+        ' ',
+        el('span', { className: 'text-xs text-gray-600 ml-2' }, `${mehran2PredPct}% estimated CA-AKI`)
       )
     ),
     el('div', { className: 'grid grid-cols-1 md:grid-cols-3 gap-4' },
@@ -451,7 +528,6 @@ export default function ScoresPage(): React.ReactElement {
       )),
       labeledBlock('Hb', 'g/dL — haemoglobin (Mehran-2 gives 1 point if <11 g/dL)', numberInput(hb, setHb, 'g/dL')),
       labeledBlock('Basal glucose', 'mg/dL — fasting / baseline glucose (>=150 adds 1 point)', numberInput(basalGlucose, setBasalGlucose, 'mg/dL')),
-
       el('div', { className: 'col-span-1 md:col-span-3' },
         labeledBlock('Procedural items (Model 2)', 'Contrast volume / bleeding / slow flow / complexity', el('div', { className: 'grid grid-cols-1 md:grid-cols-4 gap-3 mt-2' },
           numberInput(contrastVolumeMl, setContrastVolumeMl, 'Contrast mL (Model2 thresholds: <100=0,100-199=1,200-299=2,>=300=4)'),
@@ -496,7 +572,7 @@ export default function ScoresPage(): React.ReactElement {
     )
   );
 
-  // ACEF card (show clear hints beside parameters)
+  // ACEF card
   const acefCard = el(
     'div',
     { className: 'bg-white rounded shadow p-4' },
@@ -506,7 +582,9 @@ export default function ScoresPage(): React.ReactElement {
         'ACEF: ',
         el('span', { className: 'font-semibold text-gray-900' }, `${acef.score ?? '—'}`),
         ' — ',
-        el('span', { className: 'text-gray-900' }, acef.category)
+        el('span', { className: 'text-gray-900' }, acef.category),
+        ' ',
+        el('span', { className: 'text-xs text-gray-600 ml-2' }, acefPredPct !== null ? `${acefPredPct}% est` : '')
       )
     ),
     el('div', { className: 'grid grid-cols-1 md:grid-cols-3 gap-4' },
@@ -516,7 +594,7 @@ export default function ScoresPage(): React.ReactElement {
     )
   );
 
-  // ACEF-II card (with explanation next to each param)
+  // ACEF-II card
   const acef2Card = el(
     'div',
     { className: 'bg-white rounded shadow p-4' },
@@ -526,7 +604,9 @@ export default function ScoresPage(): React.ReactElement {
         'ACEF-II: ',
         el('span', { className: 'font-semibold text-gray-900' }, `${acef2.score ?? '—'}`),
         ' — ',
-        el('span', { className: 'text-gray-900' }, acef2.category)
+        el('span', { className: 'text-gray-900' }, acef2.category),
+        ' ',
+        el('span', { className: 'text-xs text-gray-600 ml-2' }, acef2PredPct !== null ? `${acef2PredPct}% est` : '')
       )
     ),
     el('div', { className: 'grid grid-cols-1 md:grid-cols-4 gap-4' },
@@ -548,7 +628,7 @@ export default function ScoresPage(): React.ReactElement {
     )
   );
 
-  // Save button
+  // Save button element
   const saveButton = el('div', { className: 'flex justify-end' },
     el('button', {
       onClick: () => { void saveAll(); },
@@ -557,18 +637,16 @@ export default function ScoresPage(): React.ReactElement {
     }, saving ? 'Saving…' : 'Save All Scores')
   );
 
-  // savedRow display
-  const savedRowBlock = savedRow
-    ? el('div', { className: 'bg-white rounded shadow p-3 text-sm text-gray-700' },
-      el('div', null, el('strong', { className: 'text-gray-900' }, 'Saved (last):')),
-      el('div', { className: 'mt-1 text-gray-900' }, `Mehran: ${savedRow.mehran1_score ?? '—'} (${savedRow.mehran1_risk_category ?? '—'})`),
-      el('div', { className: 'text-gray-900' }, `Mehran-2: ${savedRow.mehran2_score ?? '—'} (${savedRow.mehran2_risk_category ?? '—'})`),
-      el('div', { className: 'text-gray-900' }, `ACEF: ${savedRow.acef_score ?? '—'} (${savedRow.acef_risk_category ?? '—'})`),
-      el('div', { className: 'text-gray-900' }, `ACEF-II: ${savedRow.acef2_score ?? '—'} (${savedRow.acef2_risk_category ?? '—'})`)
-    )
-    : null;
+  // savedRow block
+  const savedRowBlock = savedRow ? el('div', { className: 'bg-white rounded shadow p-3 text-sm text-gray-700' },
+    el('div', null, el('strong', { className: 'text-gray-900' }, 'Saved (last):')),
+    el('div', { className: 'mt-1 text-gray-900' }, `Mehran: ${savedRow.mehran1_score ?? '—'} (${savedRow.mehran1_risk_category ?? '—'}) — ${savedRow.mehran1_predicted_risk ?? '—'}%`),
+    el('div', { className: 'text-gray-900' }, `Mehran-2: ${savedRow.mehran2_score ?? '—'} (${savedRow.mehran2_risk_category ?? '—'}) — ${savedRow.mehran2_predicted_risk ?? '—'}%`),
+    el('div', { className: 'text-gray-900' }, `ACEF: ${savedRow.acef_score ?? '—'} (${savedRow.acef_risk_category ?? '—'}) — ${savedRow.acef_predicted_risk ?? '—'}%`),
+    el('div', { className: 'text-gray-900' }, `ACEF-II: ${savedRow.acef2_score ?? '—'} (${savedRow.acef2_risk_category ?? '—'}) — ${savedRow.acef2_predicted_risk ?? '—'}%`)
+  ) : null;
 
-  // final page container
+  // final container
   return el('div', { className: 'min-h-screen bg-gray-50 p-6' },
     summaryBlock,
     el('div', { className: 'w-full max-w-6xl mx-auto space-y-6' },
