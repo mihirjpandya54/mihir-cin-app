@@ -26,14 +26,16 @@ type RiskScoresRow = {
   acef2_risk_category?: string | null;
 };
 
-export default function ScoresPage() {
+// small alias to avoid repeating React.createElement
+const el = React.createElement;
+
+export default function ScoresPage(): React.ReactElement {
   const [patientId, setPatientId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savedRow, setSavedRow] = useState<RiskScoresRow | null>(null);
 
   // ----------------- Form inputs (manual only) -----------------
-  // Shared / Mehran
   const [age, setAge] = useState<number | ''>('');
   const [sex, setSex] = useState<'Male' | 'Female' | 'Other' | ''>('');
   const [scr, setScr] = useState<number | ''>(''); // mg/dL
@@ -41,14 +43,14 @@ export default function ScoresPage() {
   const [hb, setHb] = useState<number | ''>(''); // g/dL (for anemia)
   const [diabetesType, setDiabetesType] = useState<'none' | 'non-insulin' | 'insulin' | ''>('');
   const [chf, setChf] = useState<boolean>(false);
-  const [hypotension, setHypotension] = useState<boolean>(false); // periprocedural low
+  const [hypotension, setHypotension] = useState<boolean>(false);
   const [iabp, setIabp] = useState<boolean>(false);
   const [contrastVolumeMl, setContrastVolumeMl] = useState<number | ''>('');
   const [lvef, setLvef] = useState<number | ''>(''); // %
   const [presentation, setPresentation] = useState<'stable' | 'unstable-angina' | 'nstemi' | 'stemi' | ''>('');
   const [basalGlucose, setBasalGlucose] = useState<number | ''>(''); // mg/dL
-  const [proceduralBleed, setProceduralBleed] = useState<boolean>(false); // Hb drop >3g/dL
-  const [slowFlow, setSlowFlow] = useState<boolean>(false); // TIMI 0–1
+  const [proceduralBleed, setProceduralBleed] = useState<boolean>(false);
+  const [slowFlow, setSlowFlow] = useState<boolean>(false);
   const [complexAnatomy, setComplexAnatomy] = useState<boolean>(false);
   const [isEmergency, setIsEmergency] = useState<boolean>(false);
   const [hematocrit, setHematocrit] = useState<number | ''>(''); // %
@@ -79,7 +81,6 @@ export default function ScoresPage() {
           }
         }
       } catch (err) {
-        // Keep console error for debugging
         // eslint-disable-next-line no-console
         console.error('load error', err);
       } finally {
@@ -90,7 +91,6 @@ export default function ScoresPage() {
 
   // ----------------- Calculation helpers -----------------
 
-  // Mehran original (Model A: uses baseline creatinine >=1.5 mg/dL)
   function calcMehran(): { score: number; category: string } {
     let score = 0;
 
@@ -123,7 +123,6 @@ export default function ScoresPage() {
     return { score, category: cat };
   }
 
-  // Mehran-2 Model 1 (pre-procedural)
   function calcMehran2Model1(): { score: number; category: string } {
     let score = 0;
 
@@ -159,7 +158,6 @@ export default function ScoresPage() {
     return { score, category: cat };
   }
 
-  // Mehran-2 Model 2 (adds procedural items)
   function calcMehran2Model2(model1Score: number): { score: number; category: string } {
     let score = model1Score;
 
@@ -183,7 +181,6 @@ export default function ScoresPage() {
     return { score, category: cat };
   }
 
-  // ACEF
   function calcACEF(): { score: number | null; category: string } {
     if (typeof age !== 'number' || typeof lvef !== 'number' || lvef === 0) return { score: null, category: '—' };
     let acef = age / lvef;
@@ -192,7 +189,6 @@ export default function ScoresPage() {
     return { score: Number(acef.toFixed(3)), category: cat };
   }
 
-  // ACEF-II
   function calcACEF2(): { score: number | null; category: string } {
     if (typeof age !== 'number' || typeof lvef !== 'number' || lvef === 0) return { score: null, category: '—' };
     let acef2 = age / lvef;
@@ -255,306 +251,352 @@ export default function ScoresPage() {
     }
   }
 
-  // ----------------- UI helpers -----------------
-  function numberInput(value: number | '' | undefined, onChange: (v: number | '') => void, placeholder = ''): JSX.Element {
-    return (
-      <input
-        className="w-full rounded border px-2 py-1 text-sm text-gray-900"
-        value={value === '' || value === undefined || value === null ? '' : String(value)}
-        placeholder={placeholder}
-        onChange={(e) => {
-          const v = e.target.value;
-          if (v === '') onChange('');
-          else {
-            const n = Number(v);
-            onChange(Number.isNaN(n) ? '' : n);
-          }
-        }}
-      />
-    );
+  // ----------------- UI helpers (non-JSX) -----------------
+  function numberInput(value: number | '' | undefined, onChange: (v: number | '') => void, placeholder = ''): React.ReactElement {
+    return el('input', {
+      className: 'w-full rounded border px-2 py-1 text-sm text-gray-900',
+      value: value === '' || value === undefined || value === null ? '' : String(value),
+      placeholder,
+      onChange: (e: React.ChangeEvent<HTMLInputElement>) => {
+        const v = e.target.value;
+        if (v === '') onChange('');
+        else {
+          const n = Number(v);
+          onChange(Number.isNaN(n) ? '' : n);
+        }
+      }
+    });
   }
 
-  if (loading) return <div className="p-6 text-gray-900">Loading…</div>;
+  if (loading) {
+    return el('div', { className: 'p-6 text-gray-900' }, 'Loading…');
+  }
 
-  // ----------------- Render -----------------
-  return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      {/* Top summary */}
-      <div className="w-full max-w-6xl mx-auto mb-4">
-        <div className="bg-white rounded shadow p-4 flex items-center justify-between gap-4">
-          <div>
-            <h1 className="text-xl font-bold text-gray-900">🧮 Risk Scores — Summary</h1>
-            <div className="text-sm text-gray-700 mt-1">Enter parameters manually in cards below. Summary updates live.</div>
-          </div>
+  // ----------------- Build UI programmatically -----------------
 
-          <div className="flex gap-6 items-center text-gray-900">
-            <div className="text-sm">
-              <div>
-                <strong className="text-gray-900">Mehran:</strong>{' '}
-                <span className="font-semibold">{mehran.score} ({mehran.category})</span>
-              </div>
-              <div className="mt-1">
-                <strong className="text-gray-900">Mehran-2 (M2):</strong>{' '}
-                <span className="font-semibold">{mehran2_model2.score} ({mehran2_model2.category})</span>
-              </div>
-            </div>
+  // top summary block
+  const summaryBlock = el(
+    'div',
+    { className: 'w-full max-w-6xl mx-auto mb-4' },
+    el(
+      'div',
+      { className: 'bg-white rounded shadow p-4 flex items-center justify-between gap-4' },
+      el('div', null,
+        el('h1', { className: 'text-xl font-bold text-gray-900' }, '🧮 Risk Scores — Summary'),
+        el('div', { className: 'text-sm text-gray-700 mt-1' }, 'Enter parameters manually in cards below. Summary updates live.')
+      ),
+      el('div', { className: 'flex gap-6 items-center text-gray-900' },
+        el('div', { className: 'text-sm' },
+          el('div', null,
+            el('strong', { className: 'text-gray-900' }, 'Mehran:'),
+            ' ',
+            el('span', { className: 'font-semibold' }, `${mehran.score} (${mehran.category})`)
+          ),
+          el('div', { className: 'mt-1' },
+            el('strong', { className: 'text-gray-900' }, 'Mehran-2 (M2):'),
+            ' ',
+            el('span', { className: 'font-semibold' }, `${mehran2_model2.score} (${mehran2_model2.category})`)
+          )
+        ),
+        el('div', { className: 'text-sm' },
+          el('div', null,
+            el('strong', { className: 'text-gray-900' }, 'ACEF:'),
+            ' ',
+            el('span', { className: 'font-semibold' }, `${acef.score ?? '—'} (${acef.category})`)
+          ),
+          el('div', { className: 'mt-1' },
+            el('strong', { className: 'text-gray-900' }, 'ACEF-II:'),
+            ' ',
+            el('span', { className: 'font-semibold' }, `${acef2.score ?? '—'} (${acef2.category})`)
+          )
+        )
+      )
+    )
+  );
 
-            <div className="text-sm">
-              <div>
-                <strong className="text-gray-900">ACEF:</strong>{' '}
-                <span className="font-semibold">{acef.score ?? '—'} ({acef.category})</span>
-              </div>
-              <div className="mt-1">
-                <strong className="text-gray-900">ACEF-II:</strong>{' '}
-                <span className="font-semibold">{acef2.score ?? '—'} ({acef2.category})</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+  // helper to build labeled input blocks (used many times)
+  function labeledBlock(labelText: string, child: React.ReactElement): React.ReactElement {
+    return el('div', { className: 'space-y-2' }, el('label', { className: 'text-xs font-medium text-gray-900' }, labelText), child);
+  }
 
-      {/* Cards */}
-      <div className="w-full max-w-6xl mx-auto space-y-6">
-        {/* Mehran */}
-        <div className="bg-white rounded shadow p-4">
-          <div className="flex justify-between items-center mb-3">
-            <h2 className="text-lg font-bold text-gray-900">Mehran (2004)</h2>
-            <div className="text-sm text-gray-600">
-              Score: <span className="font-semibold text-gray-900">{mehran.score}</span> — <span className="text-gray-900">{mehran.category}</span>
-            </div>
-          </div>
+  // Mehran card
+  const mehranCard = el(
+    'div',
+    { className: 'bg-white rounded shadow p-4' },
+    el('div', { className: 'flex justify-between items-center mb-3' },
+      el('h2', { className: 'text-lg font-bold text-gray-900' }, 'Mehran (2004)'),
+      el('div', { className: 'text-sm text-gray-600' },
+        'Score: ',
+        el('span', { className: 'font-semibold text-gray-900' }, String(mehran.score)),
+        ' — ',
+        el('span', { className: 'text-gray-900' }, mehran.category)
+      )
+    ),
+    el('div', { className: 'grid grid-cols-1 md:grid-cols-3 gap-4' },
+      labeledBlock('Age', numberInput(age, setAge, 'years')),
+      el('div', { className: 'space-y-2' },
+        el('label', { className: 'text-xs font-medium text-gray-900' }, 'Sex'),
+        el('select', {
+          className: 'w-full rounded border px-2 py-1 text-sm text-gray-900',
+          value: sex,
+          onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setSex(e.target.value as any)
+        },
+          el('option', { value: '' }, '—'),
+          el('option', { value: 'Male' }, 'Male'),
+          el('option', { value: 'Female' }, 'Female'),
+          el('option', { value: 'Other' }, 'Other')
+        )
+      ),
+      labeledBlock('Baseline SCr (mg/dL)', numberInput(scr, setScr, 'mg/dL')),
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="space-y-2">
-              <label className="text-xs font-medium text-gray-900">Age</label>
-              {numberInput(age, setAge, 'years')}
-            </div>
+      labeledBlock('Hb (g/dL)', numberInput(hb, setHb, 'g/dL')),
 
-            <div className="space-y-2">
-              <label className="text-xs font-medium text-gray-900">Sex</label>
-              <select
-                className="w-full rounded border px-2 py-1 text-sm text-gray-900"
-                value={sex}
-                onChange={(e) => setSex(e.target.value as any)}
-              >
-                <option value="">—</option>
-                <option value="Male">Male</option>
-                <option value="Female">Female</option>
-                <option value="Other">Other</option>
-              </select>
-            </div>
+      el('div', { className: 'space-y-2' },
+        el('label', { className: 'text-xs font-medium text-gray-900' }, 'Diabetes'),
+        el('select', {
+          className: 'w-full rounded border px-2 py-1 text-sm text-gray-900',
+          value: diabetesType,
+          onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setDiabetesType(e.target.value as any)
+        },
+          el('option', { value: '' }, '—'),
+          el('option', { value: 'none' }, 'No'),
+          el('option', { value: 'non-insulin' }, 'Non-insulin treated'),
+          el('option', { value: 'insulin' }, 'Insulin treated')
+        )
+      ),
 
-            <div className="space-y-2">
-              <label className="text-xs font-medium text-gray-900">Baseline SCr (mg/dL)</label>
-              {numberInput(scr, setScr, 'mg/dL')}
-            </div>
+      labeledBlock('Contrast volume (mL)', numberInput(contrastVolumeMl, setContrastVolumeMl, 'mL')),
 
-            <div className="space-y-2">
-              <label className="text-xs font-medium text-gray-900">Hb (g/dL)</label>
-              {numberInput(hb, (v) => setHb(v), 'g/dL')}
-            </div>
+      el('div', { className: 'space-y-2' },
+        el('label', { className: 'text-xs font-medium text-gray-900' }, 'CHF (NYHA III/IV or pulmonary edema)'),
+        el('div', null,
+          el('input', {
+            type: 'checkbox',
+            checked: chf,
+            onChange: (e: React.ChangeEvent<HTMLInputElement>) => setChf(e.target.checked)
+          }),
+          ' ',
+          el('span', { className: 'ml-2 text-sm text-gray-900' }, 'Yes')
+        )
+      ),
 
-            <div className="space-y-2">
-              <label className="text-xs font-medium text-gray-900">Diabetes</label>
-              <select
-                className="w-full rounded border px-2 py-1 text-sm text-gray-900"
-                value={diabetesType}
-                onChange={(e) => setDiabetesType(e.target.value as any)}
-              >
-                <option value="">—</option>
-                <option value="none">No</option>
-                <option value="non-insulin">Non-insulin treated</option>
-                <option value="insulin">Insulin treated</option>
-              </select>
-            </div>
+      el('div', { className: 'space-y-2' },
+        el('label', { className: 'text-xs font-medium text-gray-900' }, 'Hypotension (periprocedural)'),
+        el('div', null,
+          el('input', {
+            type: 'checkbox',
+            checked: hypotension,
+            onChange: (e: React.ChangeEvent<HTMLInputElement>) => setHypotension(e.target.checked)
+          }),
+          ' ',
+          el('span', { className: 'ml-2 text-sm text-gray-900' }, 'Yes')
+        )
+      ),
 
-            <div className="space-y-2">
-              <label className="text-xs font-medium text-gray-900">Contrast volume (mL)</label>
-              {numberInput(contrastVolumeMl, setContrastVolumeMl, 'mL')}
-            </div>
+      el('div', { className: 'space-y-2' },
+        el('label', { className: 'text-xs font-medium text-gray-900' }, 'IABP'),
+        el('div', null,
+          el('input', {
+            type: 'checkbox',
+            checked: iabp,
+            onChange: (e: React.ChangeEvent<HTMLInputElement>) => setIabp(e.target.checked)
+          }),
+          ' ',
+          el('span', { className: 'ml-2 text-sm text-gray-900' }, 'Yes')
+        )
+      )
+    )
+  );
 
-            <div className="space-y-2">
-              <label className="text-xs font-medium text-gray-900">CHF (NYHA III/IV or pulmonary edema)</label>
-              <div>
-                <input type="checkbox" checked={chf} onChange={(e) => setChf(e.target.checked)} />{' '}
-                <span className="ml-2 text-sm text-gray-900">Yes</span>
-              </div>
-            </div>
+  // Mehran-2 card
+  const mehran2Card = el(
+    'div',
+    { className: 'bg-white rounded shadow p-4' },
+    el('div', { className: 'flex justify-between items-center mb-3' },
+      el('h2', { className: 'text-lg font-bold text-gray-900' }, 'Mehran-2 (Lancet 2021)'),
+      el('div', { className: 'text-sm text-gray-600' },
+        'Model1: ',
+        el('span', { className: 'font-semibold text-gray-900' }, String(mehran2_model1.score)),
+        ' — ',
+        el('span', { className: 'text-gray-900' }, mehran2_model1.category),
+        el('span', { className: 'mx-2' }, '|'),
+        'Model2: ',
+        el('span', { className: 'font-semibold text-gray-900' }, String(mehran2_model2.score)),
+        ' — ',
+        el('span', { className: 'text-gray-900' }, mehran2_model2.category)
+      )
+    ),
+    el('div', { className: 'grid grid-cols-1 md:grid-cols-3 gap-4' },
+      el('div', null,
+        el('label', { className: 'text-xs font-medium text-gray-900' }, 'Clinical presentation'),
+        el('select', {
+          className: 'w-full rounded border px-2 py-1 text-sm text-gray-900',
+          value: presentation,
+          onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setPresentation(e.target.value as any)
+        },
+          el('option', { value: '' }, 'Stable / Asymptomatic'),
+          el('option', { value: 'unstable-angina' }, 'Unstable angina'),
+          el('option', { value: 'nstemi' }, 'NSTEMI'),
+          el('option', { value: 'stemi' }, 'STEMI')
+        )
+      ),
+      el('div', null,
+        el('label', { className: 'text-xs font-medium text-gray-900' }, 'eGFR (mL/min/1.73m²)'),
+        numberInput(egfr, setEgfr, 'mL/min/1.73m²')
+      ),
+      el('div', null,
+        el('label', { className: 'text-xs font-medium text-gray-900' }, 'LVEF (%)'),
+        numberInput(lvef, setLvef, '%')
+      ),
+      el('div', null,
+        el('label', { className: 'text-xs font-medium text-gray-900' }, 'Diabetes (type)'),
+        el('select', {
+          className: 'w-full rounded border px-2 py-1 text-sm text-gray-900',
+          value: diabetesType,
+          onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setDiabetesType(e.target.value as any)
+        },
+          el('option', { value: '' }, '—'),
+          el('option', { value: 'none' }, 'No'),
+          el('option', { value: 'non-insulin' }, 'Non-insulin'),
+          el('option', { value: 'insulin' }, 'Insulin')
+        )
+      ),
+      el('div', null,
+        el('label', { className: 'text-xs font-medium text-gray-900' }, 'Hb (g/dL)'),
+        numberInput(hb, setHb, 'g/dL')
+      ),
+      el('div', null,
+        el('label', { className: 'text-xs font-medium text-gray-900' }, 'Basal glucose (mg/dL)'),
+        numberInput(basalGlucose, setBasalGlucose, 'mg/dL')
+      ),
 
-            <div className="space-y-2">
-              <label className="text-xs font-medium text-gray-900">Hypotension (periprocedural)</label>
-              <div>
-                <input type="checkbox" checked={hypotension} onChange={(e) => setHypotension(e.target.checked)} />{' '}
-                <span className="ml-2 text-sm text-gray-900">Yes</span>
-              </div>
-            </div>
+      el('div', { className: 'col-span-1 md:col-span-3' },
+        el('label', { className: 'text-xs font-medium text-gray-900' }, 'Procedural items (Model 2)'),
+        el('div', { className: 'grid grid-cols-1 md:grid-cols-4 gap-3 mt-2' },
+          el('div', null, numberInput(contrastVolumeMl, setContrastVolumeMl, 'Contrast mL')),
+          el('div', null,
+            el('label', { className: 'text-xs text-gray-900' }, 'Procedural bleeding (Hb drop >3 g/dL)'),
+            el('div', null,
+              el('input', {
+                type: 'checkbox',
+                checked: proceduralBleed,
+                onChange: (e: React.ChangeEvent<HTMLInputElement>) => setProceduralBleed(e.target.checked)
+              }),
+              ' ',
+              el('span', { className: 'ml-2 text-sm text-gray-900' }, 'Yes')
+            )
+          ),
+          el('div', null,
+            el('label', { className: 'text-xs text-gray-900' }, 'Slow flow / no flow (TIMI 0–1)'),
+            el('div', null,
+              el('input', {
+                type: 'checkbox',
+                checked: slowFlow,
+                onChange: (e: React.ChangeEvent<HTMLInputElement>) => setSlowFlow(e.target.checked)
+              }),
+              ' ',
+              el('span', { className: 'ml-2 text-sm text-gray-900' }, 'Yes')
+            )
+          ),
+          el('div', null,
+            el('label', { className: 'text-xs text-gray-900' }, 'Complex anatomy'),
+            el('div', null,
+              el('input', {
+                type: 'checkbox',
+                checked: complexAnatomy,
+                onChange: (e: React.ChangeEvent<HTMLInputElement>) => setComplexAnatomy(e.target.checked)
+              }),
+              ' ',
+              el('span', { className: 'ml-2 text-sm text-gray-900' }, 'Yes')
+            )
+          )
+        )
+      )
+    )
+  );
 
-            <div className="space-y-2">
-              <label className="text-xs font-medium text-gray-900">IABP</label>
-              <div>
-                <input type="checkbox" checked={iabp} onChange={(e) => setIabp(e.target.checked)} />{' '}
-                <span className="ml-2 text-sm text-gray-900">Yes</span>
-              </div>
-            </div>
-          </div>
-        </div>
+  // ACEF card
+  const acefCard = el(
+    'div',
+    { className: 'bg-white rounded shadow p-4' },
+    el('div', { className: 'flex justify-between items-center mb-3' },
+      el('h2', { className: 'text-lg font-bold text-gray-900' }, 'ACEF'),
+      el('div', { className: 'text-sm text-gray-600' },
+        'ACEF: ',
+        el('span', { className: 'font-semibold text-gray-900' }, `${acef.score ?? '—'}`),
+        ' — ',
+        el('span', { className: 'text-gray-900' }, acef.category)
+      )
+    ),
+    el('div', { className: 'grid grid-cols-1 md:grid-cols-3 gap-4' },
+      numberInput(age, setAge, 'years'),
+      numberInput(lvef, setLvef, '%'),
+      numberInput(scr, setScr, 'mg/dL')
+    )
+  );
 
-        {/* Mehran-2 */}
-        <div className="bg-white rounded shadow p-4">
-          <div className="flex justify-between items-center mb-3">
-            <h2 className="text-lg font-bold text-gray-900">Mehran-2 (Lancet 2021)</h2>
-            <div className="text-sm text-gray-600">
-              Model1: <span className="font-semibold text-gray-900">{mehran2_model1.score}</span> — <span className="text-gray-900">{mehran2_model1.category}</span>
-              <span className="mx-2">|</span>
-              Model2: <span className="font-semibold text-gray-900">{mehran2_model2.score}</span> — <span className="text-gray-900">{mehran2_model2.category}</span>
-            </div>
-          </div>
+  // ACEF-II card
+  const acef2Card = el(
+    'div',
+    { className: 'bg-white rounded shadow p-4' },
+    el('div', { className: 'flex justify-between items-center mb-3' },
+      el('h2', { className: 'text-lg font-bold text-gray-900' }, 'ACEF-II'),
+      el('div', { className: 'text-sm text-gray-600' },
+        'ACEF-II: ',
+        el('span', { className: 'font-semibold text-gray-900' }, `${acef2.score ?? '—'}`),
+        ' — ',
+        el('span', { className: 'text-gray-900' }, acef2.category)
+      )
+    ),
+    el('div', { className: 'grid grid-cols-1 md:grid-cols-4 gap-4' },
+      numberInput(age, setAge, 'years'),
+      numberInput(lvef, setLvef, '%'),
+      numberInput(scr, setScr, 'mg/dL'),
+      el('div', null,
+        el('label', { className: 'text-xs font-medium text-gray-900' }, 'Emergency'),
+        el('div', null,
+          el('input', {
+            type: 'checkbox',
+            checked: isEmergency,
+            onChange: (e: React.ChangeEvent<HTMLInputElement>) => setIsEmergency(e.target.checked)
+          }),
+          ' ',
+          el('span', { className: 'ml-2 text-sm text-gray-900' }, 'Yes')
+        ),
+        el('div', { className: 'mt-2 text-xs text-gray-900' }, 'Hematocrit (%)'),
+        numberInput(hematocrit, setHematocrit, '%')
+      )
+    )
+  );
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="text-xs font-medium text-gray-900">Clinical presentation</label>
-              <select
-                className="w-full rounded border px-2 py-1 text-sm text-gray-900"
-                value={presentation}
-                onChange={(e) => setPresentation(e.target.value as any)}
-              >
-                <option value="">Stable / Asymptomatic</option>
-                <option value="unstable-angina">Unstable angina</option>
-                <option value="nstemi">NSTEMI</option>
-                <option value="stemi">STEMI</option>
-              </select>
-            </div>
+  // Save button element
+  const saveButton = el('div', { className: 'flex justify-end' },
+    el('button', {
+      onClick: () => { void saveAll(); },
+      disabled: !patientId || saving,
+      className: 'bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-60'
+    }, saving ? 'Saving…' : 'Save All Scores')
+  );
 
-            <div>
-              <label className="text-xs font-medium text-gray-900">eGFR (mL/min/1.73m²)</label>
-              {numberInput(egfr, setEgfr, 'mL/min/1.73m²')}
-            </div>
+  // savedRow display
+  const savedRowBlock = savedRow ? el('div', { className: 'bg-white rounded shadow p-3 text-sm text-gray-700' },
+    el('div', null, el('strong', { className: 'text-gray-900' }, 'Saved (last):')),
+    el('div', { className: 'mt-1 text-gray-900' }, `Mehran: ${savedRow.mehran1_score ?? '—'} (${savedRow.mehran1_risk_category ?? '—'})`),
+    el('div', { className: 'text-gray-900' }, `Mehran-2: ${savedRow.mehran2_score ?? '—'} (${savedRow.mehran2_risk_category ?? '—'})`),
+    el('div', { className: 'text-gray-900' }, `ACEF: ${savedRow.acef_score ?? '—'} (${savedRow.acef_risk_category ?? '—'})`),
+    el('div', { className: 'text-gray-900' }, `ACEF-II: ${savedRow.acef2_score ?? '—'} (${savedRow.acef2_risk_category ?? '—'})`)
+  ) : null;
 
-            <div>
-              <label className="text-xs font-medium text-gray-900">LVEF (%)</label>
-              {numberInput(lvef, setLvef, '%')}
-            </div>
-
-            <div>
-              <label className="text-xs font-medium text-gray-900">Diabetes (type)</label>
-              <select
-                className="w-full rounded border px-2 py-1 text-sm text-gray-900"
-                value={diabetesType}
-                onChange={(e) => setDiabetesType(e.target.value as any)}
-              >
-                <option value="">—</option>
-                <option value="none">No</option>
-                <option value="non-insulin">Non-insulin</option>
-                <option value="insulin">Insulin</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="text-xs font-medium text-gray-900">Hb (g/dL)</label>
-              {numberInput(hb, setHb, 'g/dL')}
-            </div>
-
-            <div>
-              <label className="text-xs font-medium text-gray-900">Basal glucose (mg/dL)</label>
-              {numberInput(basalGlucose, setBasalGlucose, 'mg/dL')}
-            </div>
-
-            <div className="col-span-1 md:col-span-3">
-              <label className="text-xs font-medium text-gray-900">Procedural items (Model 2)</label>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mt-2">
-                <div>{numberInput(contrastVolumeMl, setContrastVolumeMl, 'Contrast mL')}</div>
-                <div>
-                  <label className="text-xs text-gray-900">Procedural bleeding (Hb drop &gt;3 g/dL)</label>
-                  <div>
-                    <input type="checkbox" checked={proceduralBleed} onChange={(e) => setProceduralBleed(e.target.checked)} />{' '}
-                    <span className="ml-2 text-sm text-gray-900">Yes</span>
-                  </div>
-                </div>
-                <div>
-                  <label className="text-xs text-gray-900">Slow flow / no flow (TIMI 0–1)</label>
-                  <div>
-                    <input type="checkbox" checked={slowFlow} onChange={(e) => setSlowFlow(e.target.checked)} />{' '}
-                    <span className="ml-2 text-sm text-gray-900">Yes</span>
-                  </div>
-                </div>
-                <div>
-                  <label className="text-xs text-gray-900">Complex anatomy</label>
-                  <div>
-                    <input type="checkbox" checked={complexAnatomy} onChange={(e) => setComplexAnatomy(e.target.checked)} />{' '}
-                    <span className="ml-2 text-sm text-gray-900">Yes</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* ACEF */}
-        <div className="bg-white rounded shadow p-4">
-          <div className="flex justify-between items-center mb-3">
-            <h2 className="text-lg font-bold text-gray-900">ACEF</h2>
-            <div className="text-sm text-gray-600">
-              ACEF: <span className="font-semibold text-gray-900">{acef.score ?? '—'}</span> — <span className="text-gray-900">{acef.category}</span>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>{numberInput(age, setAge, 'years')}</div>
-            <div>{numberInput(lvef, setLvef, '%')}</div>
-            <div>{numberInput(scr, setScr, 'mg/dL')}</div>
-          </div>
-        </div>
-
-        {/* ACEF-II */}
-        <div className="bg-white rounded shadow p-4">
-          <div className="flex justify-between items-center mb-3">
-            <h2 className="text-lg font-bold text-gray-900">ACEF-II</h2>
-            <div className="text-sm text-gray-600">
-              ACEF-II: <span className="font-semibold text-gray-900">{acef2.score ?? '—'}</span> — <span className="text-gray-900">{acef2.category}</span>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div>{numberInput(age, setAge, 'years')}</div>
-            <div>{numberInput(lvef, setLvef, '%')}</div>
-            <div>{numberInput(scr, setScr, 'mg/dL')}</div>
-            <div>
-              <label className="text-xs font-medium text-gray-900">Emergency</label>
-              <div>
-                <input type="checkbox" checked={isEmergency} onChange={(e) => setIsEmergency(e.target.checked)} />{' '}
-                <span className="ml-2 text-sm text-gray-900">Yes</span>
-              </div>
-
-              <div className="mt-2 text-xs text-gray-900">Hematocrit (%)</div>
-              {numberInput(hematocrit, setHematocrit, '%')}
-            </div>
-          </div>
-        </div>
-
-        {/* Save button */}
-        <div className="flex justify-end">
-          <button
-            onClick={saveAll}
-            disabled={!patientId || saving}
-            className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-60"
-          >
-            {saving ? 'Saving…' : 'Save All Scores'}
-          </button>
-        </div>
-
-        {/* existing saved row (if any) */}
-        {savedRow && (
-          <div className="bg-white rounded shadow p-3 text-sm text-gray-700">
-            <div>
-              <strong className="text-gray-900">Saved (last):</strong>
-            </div>
-            <div className="mt-1 text-gray-900">Mehran: {savedRow.mehran1_score} ({savedRow.mehran1_risk_category})</div>
-            <div className="text-gray-900">Mehran-2: {savedRow.mehran2_score} ({savedRow.mehran2_risk_category})</div>
-            <div className="text-gray-900">ACEF: {savedRow.acef_score} ({savedRow.acef_risk_category})</div>
-            <div className="text-gray-900">ACEF-II: {savedRow.acef2_score} ({savedRow.acef2_risk_category})</div>
-          </div>
-        )}
-      </div>
-    </div>
+  // final page container
+  return el('div', { className: 'min-h-screen bg-gray-50 p-6' },
+    summaryBlock,
+    el('div', { className: 'w-full max-w-6xl mx-auto space-y-6' },
+      mehranCard,
+      mehran2Card,
+      acefCard,
+      acef2Card,
+      saveButton,
+      savedRowBlock
+    )
   );
 }
