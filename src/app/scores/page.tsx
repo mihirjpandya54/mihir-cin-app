@@ -474,6 +474,14 @@ export default function ScoresPage(): React.ReactElement {
       labeledBlock('CHF', 'Congestive HF (NYHA III/IV or pulmonary oedema) — check if present', booleanSelect(chf, setChf)),
       labeledBlock('Hypotension (periprocedural)', 'SBP ≤80 mmHg ≥1 h or requires inotrope/IABP', booleanSelect(hypotension, setHypotension)),
       labeledBlock('IABP', 'Intra-aortic balloon pump use during procedure', booleanSelect(iabp, setIabp))
+    ),
+    // Interpretation legend for Mehran
+    el('div', { className: 'mt-3 text-xs text-gray-700' },
+      el('div', null, el('strong', null, 'Interpretation & estimated CIN risk')),
+      el('div', null, 'Low (≤5) — ~7.5%'),
+      el('div', null, 'Moderate (6–10) — ~14%'),
+      el('div', null, 'High (11–15) — ~26%'),
+      el('div', null, 'Very high (≥16) — ~57%')
     )
   );
 
@@ -538,7 +546,15 @@ export default function ScoresPage(): React.ReactElement {
             booleanSelect(complexAnatomy, setComplexAnatomy)
           )
         ))
-      )
+      ),
+    ),
+    // Interpretation legend for Mehran-2
+    el('div', { className: 'mt-3 text-xs text-gray-700' },
+      el('div', null, el('strong', null, 'Interpretation & estimated CA-AKI risk (Mehran-2)')),
+      el('div', null, 'Low (≤4) — ~2%'),
+      el('div', null, 'Moderate (5–9) — ~7%'),
+      el('div', null, 'High (10–13) — ~15%'),
+      el('div', null, 'Very high (≥14) — ~25%')
     )
   );
 
@@ -561,6 +577,13 @@ export default function ScoresPage(): React.ReactElement {
       labeledBlock('Age', 'years — Age in years (for ACEF: Age / LVEF)', numberInput(age, setAge, 'years')),
       labeledBlock('LVEF', '% — Left ventricular ejection fraction in percent (e.g., 55)', numberInput(lvef, setLvef, '%')),
       labeledBlock('Baseline SCr', 'mg/dL — Serum creatinine in mg/dL (ACEF adds +1 if >2.0 mg/dL)', numberInput(scr, setScr, 'mg/dL'))
+    ),
+    // ACEF interpretation legend (example thresholds)
+    el('div', { className: 'mt-3 text-xs text-gray-700' },
+      el('div', null, el('strong', null, 'ACEF — example interpretation (continuous score)')),
+      el('div', null, '< 0.8 — Low (example ~2%)'),
+      el('div', null, '0.8 – <1.2 — Moderate (example ~5%)'),
+      el('div', null, '≥ 1.2 — High (example ~8%)')
     )
   );
 
@@ -587,6 +610,13 @@ export default function ScoresPage(): React.ReactElement {
         labeledBlock('Emergency', 'check if emergency procedure (ACEF-II adds +3)', booleanSelect(isEmergency, setIsEmergency)),
         labeledBlock('Hematocrit', '% — If Hct < 36% then ACEF-II adds 0.2 × (36 − Hct)', numberInput(hematocrit, setHematocrit, '%'))
       )
+    ),
+    // ACEF-II interpretation legend
+    el('div', { className: 'mt-3 text-xs text-gray-700' },
+      el('div', null, el('strong', null, 'ACEF-II — example interpretation (continuous score)')),
+      el('div', null, '< 1.0 — Low (example ~2%)'),
+      el('div', null, '1.0 – <2.0 — Moderate (example ~5%)'),
+      el('div', null, '≥ 2.0 — High (example ~8%)')
     )
   );
 
