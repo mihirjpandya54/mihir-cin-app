@@ -16,18 +16,43 @@ const USER_ID = '00000000-0000-0000-0000-000000000001'; // same pattern used els
 type RiskScoresRow = {
   id?: string | null;
   patient_id?: string | null;
+  // inputs
+  age?: number | null;
+  sex?: string | null;
+  scr?: number | null;
+  egfr?: number | null;
+  hb?: number | null;
+  diabetes_type?: string | null;
+  chf?: boolean | null;
+  hypotension?: boolean | null;
+  iabp?: boolean | null;
+  contrast_volume_ml?: number | null;
+  lvef?: number | null;
+  presentation?: string | null;
+  basal_glucose?: number | null;
+  procedural_bleed?: boolean | null;
+  slow_flow?: boolean | null;
+  complex_anatomy?: boolean | null;
+  is_emergency?: boolean | null;
+  hematocrit?: number | null;
+
+  // outputs
   mehran1_score?: number | null;
   mehran1_risk_category?: string | null;
   mehran1_predicted_risk?: number | null;
+
   mehran2_score?: number | null;
   mehran2_risk_category?: string | null;
   mehran2_predicted_risk?: number | null;
+
   acef_score?: number | null;
   acef_risk_category?: string | null;
   acef_predicted_risk?: number | null;
+
   acef2_score?: number | null;
   acef2_risk_category?: string | null;
   acef2_predicted_risk?: number | null;
+
   created_at?: string | null;
 };
 
@@ -87,17 +112,40 @@ export default function ScoresPage(): React.ReactElement {
           setPatientName((pd as any)?.patient_name ?? null);
           setIpdNumber((pd as any)?.ipd_number ?? null);
 
-          // load last saved risk_scores if any
+          // ---- LOAD from risk_scores_full (new full table) ----
           const { data: rs } = await supabase
-            .from('risk_scores')
+            .from('risk_scores_full')
             .select('*')
             .eq('patient_id', pid)
-            .order('created_at', { ascending: false })
-            .limit(1)
             .maybeSingle();
 
           if (rs) {
-            setSavedRow(rs as RiskScoresRow);
+            const row = rs as RiskScoresRow;
+            setSavedRow(row);
+
+            // populate form fields from stored row (only if values present)
+            // convert nulls to '' to keep inputs editable
+            setAge(row.age ?? '');
+            setSex((row.sex as any) ?? '');
+            setScr(row.scr ?? '');
+            setEgfr(row.egfr ?? '');
+            setHb(row.hb ?? '');
+            setDiabetesType((row.diabetes_type as any) ?? '');
+            setChf(Boolean(row.chf));
+            setHypotension(Boolean(row.hypotension));
+            setIabp(Boolean(row.iabp));
+            setContrastVolumeMl(row.contrast_volume_ml ?? '');
+            setLvef(row.lvef ?? '');
+            setPresentation((row.presentation as any) ?? '');
+            setBasalGlucose(row.basal_glucose ?? '');
+            setProceduralBleed(Boolean(row.procedural_bleed));
+            setSlowFlow(Boolean(row.slow_flow));
+            setComplexAnatomy(Boolean(row.complex_anatomy));
+            setIsEmergency(Boolean(row.is_emergency));
+            setHematocrit(row.hematocrit ?? '');
+          } else {
+            // no saved row found in risk_scores_full
+            setSavedRow(null);
           }
         }
       } catch (err) {
@@ -273,31 +321,59 @@ export default function ScoresPage(): React.ReactElement {
   const acefPredPct = useMemo(() => acefPredictedRiskPct(acef.score ?? null), [acef.score]);
   const acef2PredPct = useMemo(() => acef2PredictedRiskPct(acef2.score ?? null), [acef2.score]);
 
-  // ----------------- Save (upsert risk_scores) -----------------
+  // ----------------- Save (upsert to risk_scores_full) -----------------
   async function saveAll(): Promise<void> {
     if (!patientId) {
       alert('No active patient selected.');
       return;
     }
     setSaving(true);
+
     try {
-      const payload: RiskScoresRow = {
+      // build payload with all input params + calculated outputs (column names follow risk_scores_full)
+      const payload = {
         patient_id: patientId,
+
+        // inputs (use DB column names as in risk_scores_full)
+        age: typeof age === 'number' ? age : null,
+        sex: sex || null,
+        scr: typeof scr === 'number' ? scr : null,
+        egfr: typeof egfr === 'number' ? egfr : null,
+        hb: typeof hb === 'number' ? hb : null,
+        diabetes_type: diabetesType || null,
+        chf: Boolean(chf),
+        hypotension: Boolean(hypotension),
+        iabp: Boolean(iabp),
+        contrast_volume_ml: typeof contrastVolumeMl === 'number' ? contrastVolumeMl : null,
+        lvef: typeof lvef === 'number' ? lvef : null,
+        presentation: presentation || null,
+        basal_glucose: typeof basalGlucose === 'number' ? basalGlucose : null,
+        procedural_bleed: Boolean(proceduralBleed),
+        slow_flow: Boolean(slowFlow),
+        complex_anatomy: Boolean(complexAnatomy),
+        is_emergency: Boolean(isEmergency),
+        hematocrit: typeof hematocrit === 'number' ? hematocrit : null,
+
+        // outputs
         mehran1_score: Number(mehran.score),
         mehran1_risk_category: mehran.category,
         mehran1_predicted_risk: Number(mehranPredPct),
+
         mehran2_score: Number(mehran2_model2.score),
         mehran2_risk_category: mehran2_model2.category,
         mehran2_predicted_risk: Number(mehran2PredPct),
+
         acef_score: acef.score ?? null,
         acef_risk_category: acef.category,
         acef_predicted_risk: acefPredPct ?? null,
+
         acef2_score: acef2.score ?? null,
         acef2_risk_category: acef2.category,
         acef2_predicted_risk: acef2PredPct ?? null
       };
 
-      const { error } = await supabase.from('risk_scores').upsert(payload, { onConflict: 'patient_id' });
+      // upsert into risk_scores_full - relies on UNIQUE(patient_id)
+      const { error } = await supabase.from('risk_scores_full').upsert(payload, { onConflict: 'patient_id' });
 
       if (error) {
         // eslint-disable-next-line no-console
@@ -305,14 +381,17 @@ export default function ScoresPage(): React.ReactElement {
         alert('Save failed — check console.');
       } else {
         alert('Scores saved ✅');
+
+        // refresh savedRow from risk_scores_full
         const { data: fresh } = await supabase
-          .from('risk_scores')
+          .from('risk_scores_full')
           .select('*')
           .eq('patient_id', patientId)
-          .order('created_at', { ascending: false })
-          .limit(1)
           .maybeSingle();
-        if (fresh) setSavedRow(fresh as RiskScoresRow);
+
+        if (fresh) {
+          setSavedRow(fresh as RiskScoresRow);
+        }
       }
     } catch (err) {
       // eslint-disable-next-line no-console
